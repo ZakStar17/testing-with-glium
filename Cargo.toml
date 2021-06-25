@@ -1,5 +1,5 @@
 [package]
-name = "test1"
+name = "glium_testing"
 version = "0.1.0"
 authors = ["ZakStar17 <55145159+ZakStar17@users.noreply.github.com>"]
 edition = "2018"

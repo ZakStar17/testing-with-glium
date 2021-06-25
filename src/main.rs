@@ -3,36 +3,16 @@ extern crate glium;
 extern crate cgmath;
 extern crate image;
 
-use std::io::Cursor;
+use std::f32::consts::PI;
 
-use cgmath::{Euler, Matrix4, PerspectiveFov, Rad, Vector3, InnerSpace, Point3};
+use cgmath::{InnerSpace, Matrix4, PerspectiveFov, Point3, Rad, Vector3};
 use glium::{glutin, Surface};
 
-pub trait ToArr {
-    type Output;
-    fn to_arr(&self) -> Self::Output;
-}
+mod common;
+mod cube;
 
-impl ToArr for Matrix4<f32> {
-    type Output = [[f32; 4]; 4];
-    fn to_arr(&self) -> Self::Output {
-        (*self).into()
-    }
-}
-
-impl ToArr for PerspectiveFov<f32> {
-    type Output = [[f32; 4]; 4];
-    fn to_arr(&self) -> Self::Output {
-        let matrix: Matrix4<f32> = (*self).into();
-        matrix.to_arr()
-    }
-}
-
-#[derive(Copy, Clone)]
-struct Vertex {
-    position: [f32; 3],
-    tex_coords: [f32; 2],
-}
+use common::ToArray;
+use cube::{Cube, CubeConfig};
 
 struct Camera {
     position: Point3<f32>,
@@ -48,100 +28,68 @@ impl Camera {
 }
 
 fn main() {
-    implement_vertex!(Vertex, position, tex_coords);
-
     let event_loop = glutin::event_loop::EventLoop::new();
 
     let display = {
         let wb = glutin::window::WindowBuilder::new()
             .with_title("Testing with glium")
             .with_inner_size(glutin::dpi::LogicalSize::new(768.0, 768.0));
+
         let cb = glutin::ContextBuilder::new().with_depth_buffer(24);
         glium::Display::new(wb, cb, &event_loop).unwrap()
     };
 
-    let texture = {
-        let image = image::load(
-            Cursor::new(&include_bytes!("./wall.png")),
-            image::ImageFormat::Png,
-        )
-        .unwrap()
-        .to_rgba8();
+    {
+        // window configuration
+        let gl_window = display.gl_window();
+        let window = gl_window.window();
+        window.set_cursor_grab(true).unwrap();
+        window.set_cursor_visible(false);
+    }
 
-        let image_dimensions = image.dimensions();
-        let image =
-            glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
-
-        glium::texture::Texture2d::new(&display, image).unwrap()
-    };
-
-    let cube_program = {
-        let vertex_shader_src = r#"
-            #version 140
-
-            in vec3 position;
-            in vec2 tex_coords;
-
-            out vec2 v_tex_coords;
-
-            uniform mat4 model;
-            uniform mat4 view;
-            uniform mat4 projection;
-
-            void main() {
-                gl_Position = projection * view * model * vec4(position, 1.0);
-                v_tex_coords = tex_coords;
+    let row_cube_count: usize = 7; // odd number
+    let cube_config = CubeConfig::new(&display);
+    let mut cubes: Vec<Cube> = Vec::with_capacity(row_cube_count.pow(3));
+    let a = ((row_cube_count - 1) * 2) as i32;
+    for x in (-a..=a).step_by(4) {
+        for y in (-a..=a).step_by(4) {
+            for z in (-a..=a).step_by(4) {
+                cubes.push(Cube::new(Point3::new(x as f32, y as f32, z as f32)))
             }
-        "#;
-
-        let fragment_shader_src = r#"
-            #version 140
-
-            in vec2 v_tex_coords;
-            out vec4 color;
-            
-            uniform sampler2D tex;
-            
-            void main() {
-                color = ((texture(tex, v_tex_coords) * vec4(8.0, 8.0, 8.0, 1.0)) - vec4(1.9, 1.9, 1.9, 0.0)) * vec4(0.125, 0.125, 0.125, 1.0);
-                // color = texture(tex, v_tex_coords);
-            }
-        "#;
-
-        glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src, None).unwrap()
-    };
-
-    let cube_vertex_buffer = {
-        let shape = get_cube_shape();
-        glium::VertexBuffer::new(&display, &shape).unwrap()
-    };
-
-    let cube_indices = glium::IndexBuffer::new(
-        &display,
-        glium::index::PrimitiveType::TrianglesList,
-        &get_cube_indices(),
-    )
-    .unwrap();
+        }
+    }
 
     let mut camera = Camera {
         position: Point3::new(0.0, 0.0, 3.0),
         front: Vector3::new(0.0, 0.0, -1.0),
         up: Vector3::new(0.0, 1.0, 0.0),
-        speed: 3.0
+        speed: 4.0,
     };
+
+    let mut yaw: f32 = 0.0;
+    let mut pitch: f32 = 0.0;
+    let mut mouse_delta_x: f32 = 0.0;
+    let mut mouse_delta_y: f32 = 0.0;
+    let sensitivity: f32 = 0.005;
+    let mut mouse_in_window = false;
+    let mut mouse_centered = false;
+    let mut fov: f32 = 0.8;
 
     let mut pressed_keys = [false; 4];
 
     let mut last_frame_time = std::time::Instant::now();
-    
     event_loop.run(move |event, _, control_flow| {
         match event {
             glutin::event::Event::WindowEvent { event, .. } => match event {
                 glutin::event::WindowEvent::CloseRequested => {
                     *control_flow = glutin::event_loop::ControlFlow::Exit;
                     return;
-                },
-                glutin::event::WindowEvent::KeyboardInput {device_id: _, input, is_synthetic: _} => {
+                }
+                glutin::event::WindowEvent::KeyboardInput {
+                    device_id: _,
+                    input,
+                    is_synthetic: _,
+                } => {
                     let was_pressed = input.state == glutin::event::ElementState::Pressed;
 
                     match input.scancode {
@@ -164,6 +112,54 @@ fn main() {
                         _ => {}
                     }
                 }
+                #[allow(deprecated)]
+                // todo: maybe there is another way to hide the unused deprecated variable
+                glutin::event::WindowEvent::CursorMoved {
+                    device_id: _,
+                    position,
+                    modifiers: _,
+                } => {
+                    // capture mouse movement
+                    // todo: the documentation says to not use this event for the game purpose, do it another way
+
+                    let gl_window = display.gl_window();
+                    let window = gl_window.window();
+
+                    let size = window.inner_size();
+                    let middle = (size.width as f64 / 2.0, size.height as f64 / 2.0);
+
+                    if mouse_in_window && mouse_centered {
+                        mouse_delta_x = (position.x - middle.0) as f32 * sensitivity;
+                        mouse_delta_y = (middle.1 - position.y) as f32 * sensitivity;
+                    }
+
+                    window
+                        .set_cursor_position(glutin::dpi::Position::new(
+                            glutin::dpi::PhysicalPosition::<f64>::new(middle.0, middle.1),
+                        ))
+                        .unwrap();
+
+                    mouse_centered = true;
+                }
+                glutin::event::WindowEvent::CursorEntered { device_id: _ } => {
+                    mouse_in_window = true;
+                }
+                glutin::event::WindowEvent::CursorLeft { device_id: _ } => {
+                    mouse_in_window = false;
+                    mouse_centered = false;
+                }
+                #[allow(deprecated)]
+                glutin::event::WindowEvent::MouseWheel {device_id: _, delta, phase: _, modifiers: _} => {
+                    if let glium::glutin::event::MouseScrollDelta::LineDelta(_, y) = delta {
+                        fov -= y * 0.07;
+                        if fov > PI / 1.1 {
+                            fov = PI / 1.1;
+                        }
+                        else if fov < PI / 15.0 {
+                            fov = PI / 15.0;
+                        }
+                    }
+                }
                 _ => return,
             },
             glutin::event::Event::NewEvents(cause) => match cause {
@@ -181,18 +177,40 @@ fn main() {
         let current_frame_time = std::time::Instant::now();
         let delta_time = current_frame_time - last_frame_time;
 
+        yaw += mouse_delta_x;
+        pitch += mouse_delta_y;
+
+        if pitch > 1.5 {
+            pitch = 1.5;
+        } else if pitch < -1.5 {
+            pitch = -1.5;
+        }
+
+        let direction: Vector3<f32> = {
+            let x = yaw.cos() * pitch.cos();
+            let y = pitch.sin();
+            let z = yaw.sin() * pitch.cos();
+            Vector3::new(x, y, z)
+        };
+
+        camera.front = direction;
+
         // todo: this looks horrible
         let delta_camera_speed = camera.speed * delta_time.as_secs_f32();
-        if pressed_keys[0] {  // w
+        if pressed_keys[0] {
+            // w
             camera.position += camera.front * delta_camera_speed;
         }
-        if pressed_keys[1] {  // a
+        if pressed_keys[1] {
+            // a
             camera.position -= camera.front.cross(camera.up).normalize() * delta_camera_speed;
         }
-        if pressed_keys[2] {  // s
+        if pressed_keys[2] {
+            // s
             camera.position -= camera.front * delta_camera_speed;
         }
-        if pressed_keys[3] {  // d
+        if pressed_keys[3] {
+            // d
             camera.position += camera.front.cross(camera.up).normalize() * delta_camera_speed;
         }
 
@@ -204,32 +222,14 @@ fn main() {
             let aspect_ratio = width as f32 / height as f32;
 
             PerspectiveFov {
-                fovy: Rad(0.8539816),
+                fovy: Rad(fov),
                 aspect: aspect_ratio,
                 far: 100.0,
                 near: 0.1,
             }
-            .to_arr()
+            .to_array()
         };
-        let view = camera.get_view_matrix().to_arr();
-        let model = {
-            let translation_matrix = Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.0));
-            let rotation_matrix = Matrix4::from(Euler {
-                x: Rad(0.0),
-                y: Rad(0.0),
-                z: Rad(0.0),
-            });
-            let scale_matrix = Matrix4::from_scale(1.5);
-
-            (translation_matrix * rotation_matrix * scale_matrix).to_arr()
-        };
-
-        let uniforms = uniform! {
-            projection: projection,
-            view: view,
-            model: model,
-            tex: &texture,
-        };
+        let view = camera.get_view_matrix().to_array();
 
         let params = glium::DrawParameters {
             depth: glium::Depth {
@@ -240,56 +240,28 @@ fn main() {
             ..Default::default()
         };
 
-        // draw cube
-        target
-            .draw(&cube_vertex_buffer, &cube_indices, &cube_program, &uniforms, &params)
-            .unwrap();
+        for cube in cubes.iter() {
+            let uniforms = uniform! {
+                projection: projection,
+                view: view,
+                model: cube.model_matrix,
+                tex: &cube_config.texture,
+            };
+            // draw cube
+            target
+                .draw(
+                    &cube_config.vertex_buffer,
+                    &cube_config.index_buffer,
+                    &cube_config.program,
+                    &uniforms,
+                    &params,
+                )
+                .unwrap();
+        }
         target.finish().unwrap();
 
         last_frame_time = current_frame_time;
+        mouse_delta_x = 0.0;
+        mouse_delta_y = 0.0
     });
-}
-
-fn get_cube_shape() -> Vec<Vertex> {
-    vec![
-        Vertex {
-            position: [-0.5, 0.5, -0.5],
-            tex_coords: [0.0, 1.0],
-        },
-        Vertex {
-            position: [-0.5, -0.5, -0.5],
-            tex_coords: [0.0, 0.0],
-        },
-        Vertex {
-            position: [0.5, -0.5, -0.5],
-            tex_coords: [1.0, 0.0],
-        },
-        Vertex {
-            position: [0.5, 0.5, -0.5],
-            tex_coords: [1.0, 1.0],
-        },
-        Vertex {
-            position: [-0.5, 0.5, 0.5],
-            tex_coords: [0.0, 1.0],
-        },
-        Vertex {
-            position: [-0.5, -0.5, 0.5],
-            tex_coords: [0.0, 0.0],
-        },
-        Vertex {
-            position: [0.5, -0.5, 0.5],
-            tex_coords: [1.0, 0.0],
-        },
-        Vertex {
-            position: [0.5, 0.5, 0.5],
-            tex_coords: [1.0, 1.0],
-        },
-    ]
-}
-
-fn get_cube_indices() -> [u8; 36] {
-    [
-        0, 2, 1, 0, 2, 3, 0, 7, 3, 0, 7, 4, 1, 4, 0, 1, 4, 5, 2, 5, 1, 2, 5, 6, 3, 6, 2, 3, 6, 7,
-        4, 6, 5, 4, 6, 7,
-    ]
 }
