@@ -3,28 +3,28 @@ extern crate glium;
 extern crate cgmath;
 extern crate image;
 
-use std::f32::consts::PI;
-
-use cgmath::{InnerSpace, Matrix4, PerspectiveFov, Point3, Rad, Vector3};
+use cgmath::Point3;
 use glium::{glutin, Surface};
 
+mod camera;
 mod common;
 mod cube;
+mod shaders;
 
+use camera::Camera;
 use common::ToArray;
-use cube::{Cube, CubeConfig};
+use cube::Cube;
+use shaders::{programs, simple_objects::CubeObject};
 
-struct Camera {
-    position: Point3<f32>,
-    front: Vector3<f32>,
-    up: Vector3<f32>,
-    speed: f32,
+struct Mouse {
+    delta_x: f32,
+    delta_y: f32,
+    in_window: bool,
+    centered: bool,
 }
 
-impl Camera {
-    fn get_view_matrix(&self) -> Matrix4<f32> {
-        Matrix4::look_at_rh(self.position, self.position + self.front, self.up)
-    }
+struct Programs {
+    textured_object: glium::Program,
 }
 
 fn main() {
@@ -47,45 +47,48 @@ fn main() {
         window.set_cursor_visible(false);
     }
 
+    // create a lot of cubes for testing
     let row_cube_count: usize = 7; // odd number
-    let cube_config = CubeConfig::new(&display);
     let mut cubes: Vec<Cube> = Vec::with_capacity(row_cube_count.pow(3));
-    let a = ((row_cube_count - 1) * 2) as i32;
-    for x in (-a..=a).step_by(4) {
-        for y in (-a..=a).step_by(4) {
-            for z in (-a..=a).step_by(4) {
-                cubes.push(Cube::new(Point3::new(x as f32, y as f32, z as f32)))
+    {
+        let a = ((row_cube_count - 1) * 2) as i32;
+        for x in (-a..=a).step_by(4) {
+            for y in (-a..=a).step_by(4) {
+                for z in (-a..=a).step_by(4) {
+                    cubes.push(Cube::new(Point3::new(x as f32, y as f32, z as f32)))
+                }
             }
         }
     }
+    let cube_object = CubeObject::new(&display);
 
-    let mut camera = Camera {
-        position: Point3::new(0.0, 0.0, 3.0),
-        front: Vector3::new(0.0, 0.0, -1.0),
-        up: Vector3::new(0.0, 1.0, 0.0),
-        speed: 4.0,
+    let programs = Programs {
+        textured_object: programs::simple_textured_object(&display),
     };
 
-    let mut yaw: f32 = 0.0;
-    let mut pitch: f32 = 0.0;
-    let mut mouse_delta_x: f32 = 0.0;
-    let mut mouse_delta_y: f32 = 0.0;
-    let sensitivity: f32 = 0.005;
-    let mut mouse_in_window = false;
-    let mut mouse_centered = false;
-    let mut fov: f32 = 0.8;
+    let mut camera = Camera::new(Point3::new(0.0, 0.0, 3.0));
+
+    let mut projection_matrix = camera.get_projection_matrix(get_aspect_ratio(&display));
+
+    let mut mouse = Mouse {
+        delta_x: 0.0,
+        delta_y: 0.0,
+        in_window: false,
+        centered: false,
+    };
 
     let mut pressed_keys = [false; 4];
 
     let mut last_frame_time = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
+        use glutin::event::WindowEvent;
         match event {
             glutin::event::Event::WindowEvent { event, .. } => match event {
-                glutin::event::WindowEvent::CloseRequested => {
+                WindowEvent::CloseRequested => {
                     *control_flow = glutin::event_loop::ControlFlow::Exit;
                     return;
                 }
-                glutin::event::WindowEvent::KeyboardInput {
+                WindowEvent::KeyboardInput {
                     device_id: _,
                     input,
                     is_synthetic: _,
@@ -114,7 +117,7 @@ fn main() {
                 }
                 #[allow(deprecated)]
                 // todo: maybe there is another way to hide the unused deprecated variable
-                glutin::event::WindowEvent::CursorMoved {
+                WindowEvent::CursorMoved {
                     device_id: _,
                     position,
                     modifiers: _,
@@ -128,9 +131,9 @@ fn main() {
                     let size = window.inner_size();
                     let middle = (size.width as f64 / 2.0, size.height as f64 / 2.0);
 
-                    if mouse_in_window && mouse_centered {
-                        mouse_delta_x = (position.x - middle.0) as f32 * sensitivity;
-                        mouse_delta_y = (middle.1 - position.y) as f32 * sensitivity;
+                    if mouse.in_window && mouse.centered {
+                        mouse.delta_x = (position.x - middle.0) as f32;
+                        mouse.delta_y = (middle.1 - position.y) as f32;
                     }
 
                     window
@@ -139,26 +142,31 @@ fn main() {
                         ))
                         .unwrap();
 
-                    mouse_centered = true;
+                    mouse.centered = true;
                 }
-                glutin::event::WindowEvent::CursorEntered { device_id: _ } => {
-                    mouse_in_window = true;
+                WindowEvent::CursorEntered { device_id: _ } => {
+                    mouse.in_window = true;
                 }
-                glutin::event::WindowEvent::CursorLeft { device_id: _ } => {
-                    mouse_in_window = false;
-                    mouse_centered = false;
+                WindowEvent::CursorLeft { device_id: _ } => {
+                    mouse.in_window = false;
+                    mouse.centered = false;
                 }
                 #[allow(deprecated)]
-                glutin::event::WindowEvent::MouseWheel {device_id: _, delta, phase: _, modifiers: _} => {
+                WindowEvent::MouseWheel {
+                    device_id: _,
+                    delta,
+                    phase: _,
+                    modifiers: _,
+                } => {
                     if let glium::glutin::event::MouseScrollDelta::LineDelta(_, y) = delta {
-                        fov -= y * 0.07;
-                        if fov > PI / 1.1 {
-                            fov = PI / 1.1;
-                        }
-                        else if fov < PI / 15.0 {
-                            fov = PI / 15.0;
-                        }
+                        camera.handle_zoom(y);
+                        // update projection_matrix because of fov changes
+                        projection_matrix = camera.get_projection_matrix(get_aspect_ratio(&display))
                     }
+                }
+                WindowEvent::Resized(new_size) => {
+                    projection_matrix =
+                        camera.get_projection_matrix(new_size.width as f32 / new_size.height as f32)
                 }
                 _ => return,
             },
@@ -170,6 +178,7 @@ fn main() {
             _ => return,
         }
 
+        // max framerate = 60fps
         let next_frame_time =
             std::time::Instant::now() + std::time::Duration::from_nanos(16_666_667);
         *control_flow = glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
@@ -177,59 +186,15 @@ fn main() {
         let current_frame_time = std::time::Instant::now();
         let delta_time = current_frame_time - last_frame_time;
 
-        yaw += mouse_delta_x;
-        pitch += mouse_delta_y;
-
-        if pitch > 1.5 {
-            pitch = 1.5;
-        } else if pitch < -1.5 {
-            pitch = -1.5;
-        }
-
-        let direction: Vector3<f32> = {
-            let x = yaw.cos() * pitch.cos();
-            let y = pitch.sin();
-            let z = yaw.sin() * pitch.cos();
-            Vector3::new(x, y, z)
-        };
-
-        camera.front = direction;
-
-        // todo: this looks horrible
-        let delta_camera_speed = camera.speed * delta_time.as_secs_f32();
-        if pressed_keys[0] {
-            // w
-            camera.position += camera.front * delta_camera_speed;
-        }
-        if pressed_keys[1] {
-            // a
-            camera.position -= camera.front.cross(camera.up).normalize() * delta_camera_speed;
-        }
-        if pressed_keys[2] {
-            // s
-            camera.position -= camera.front * delta_camera_speed;
-        }
-        if pressed_keys[3] {
-            // d
-            camera.position += camera.front.cross(camera.up).normalize() * delta_camera_speed;
-        }
+        camera.handle_mouse_movement(mouse.delta_x, mouse.delta_y);
+        camera.handle_keys(pressed_keys, delta_time);
 
         let mut target = display.draw();
         target.clear_color_and_depth((0.0, 0.0, 1.0, 1.0), 1.0);
 
-        let projection = {
-            let (width, height) = target.get_dimensions();
-            let aspect_ratio = width as f32 / height as f32;
+        let view_matrix = camera.get_view_matrix();
 
-            PerspectiveFov {
-                fovy: Rad(fov),
-                aspect: aspect_ratio,
-                far: 100.0,
-                near: 0.1,
-            }
-            .to_array()
-        };
-        let view = camera.get_view_matrix().to_array();
+        let projection_view = projection_matrix * view_matrix;
 
         let params = glium::DrawParameters {
             depth: glium::Depth {
@@ -241,18 +206,17 @@ fn main() {
         };
 
         for cube in cubes.iter() {
+            let matrix = projection_view * cube.model_matrix;
             let uniforms = uniform! {
-                projection: projection,
-                view: view,
-                model: cube.model_matrix,
-                tex: &cube_config.texture,
+                matrix: matrix.to_array(),
+                tex: &cube_object.texture,
             };
             // draw cube
             target
                 .draw(
-                    &cube_config.vertex_buffer,
-                    &cube_config.index_buffer,
-                    &cube_config.program,
+                    &cube_object.vertex_buffer,
+                    &cube_object.index_buffer,
+                    &programs.textured_object,
                     &uniforms,
                     &params,
                 )
@@ -261,7 +225,12 @@ fn main() {
         target.finish().unwrap();
 
         last_frame_time = current_frame_time;
-        mouse_delta_x = 0.0;
-        mouse_delta_y = 0.0
+        mouse.delta_x = 0.0;
+        mouse.delta_y = 0.0
     });
+}
+
+fn get_aspect_ratio(display: &glium::Display) -> f32 {
+    let size = display.gl_window().window().inner_size();
+    size.width as f32 / size.height as f32
 }
