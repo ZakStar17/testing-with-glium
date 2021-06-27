@@ -5,6 +5,7 @@ pub use cgmath::{Matrix4, PerspectiveFov};
 #[derive(Copy, Clone)]
 pub struct Vertex {
     pub position: [f32; 3],
+    pub normal: [f32; 3],
     pub tex_coords: [f32; 2],
 }
 
@@ -32,5 +33,5 @@ impl ToArray for PerspectiveFov<f32> {
 
 #[allow(dead_code)]
 pub fn main() {
-    implement_vertex!(Vertex, position, tex_coords);
+    implement_vertex!(Vertex, position, normal, tex_coords);
 }

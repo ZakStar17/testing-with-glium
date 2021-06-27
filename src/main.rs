@@ -3,18 +3,21 @@ extern crate glium;
 extern crate cgmath;
 extern crate image;
 
-use cgmath::Point3;
+use cgmath::{Euler, Point3, Rad, Vector3};
 use glium::{glutin, Surface};
 
 mod camera;
 mod common;
-mod cube;
+mod objects;
 mod shaders;
 
 use camera::Camera;
 use common::ToArray;
-use cube::Cube;
-use shaders::{programs, simple_objects::CubeObject};
+use objects::{
+    object::Object,
+    simple_objects::{Cube, SimpleLightCube},
+};
+use shaders::{programs, shader::ShaderObject, simple_shaders::CubeShader};
 
 struct Mouse {
     delta_x: f32,
@@ -25,6 +28,7 @@ struct Mouse {
 
 struct Programs {
     textured_object: glium::Program,
+    light_object: glium::Program,
 }
 
 fn main() {
@@ -48,7 +52,7 @@ fn main() {
     }
 
     // create a lot of cubes for testing
-    let row_cube_count: usize = 7; // odd number
+    let row_cube_count: usize = 3; // odd number
     let mut cubes: Vec<Cube> = Vec::with_capacity(row_cube_count.pow(3));
     {
         let a = ((row_cube_count - 1) * 2) as i32;
@@ -60,10 +64,20 @@ fn main() {
             }
         }
     }
-    let cube_object = CubeObject::new(&display);
+    let cube_object = CubeShader::new(&display);
+
+    let light = {
+        let cube = Cube::from_full(
+            Point3::new(1.0, 2.0, 3.0),
+            Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
+            0.2,
+        );
+        SimpleLightCube::new(cube, Vector3::new(1.0, 1.0, 1.0))
+    };
 
     let programs = Programs {
         textured_object: programs::simple_textured_object(&display),
+        light_object: programs::simple_light_object(&display),
     };
 
     let mut camera = Camera::new(Point3::new(0.0, 0.0, 3.0));
@@ -96,6 +110,10 @@ fn main() {
                     let was_pressed = input.state == glutin::event::ElementState::Pressed;
 
                     match input.scancode {
+                        1 => {
+                            *control_flow = glutin::event_loop::ControlFlow::Exit;
+                            return;
+                        }
                         17 => {
                             // w
                             pressed_keys[0] = was_pressed
@@ -190,7 +208,7 @@ fn main() {
         camera.handle_keys(pressed_keys, delta_time);
 
         let mut target = display.draw();
-        target.clear_color_and_depth((0.0, 0.0, 1.0, 1.0), 1.0);
+        target.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
 
         let view_matrix = camera.get_view_matrix();
 
@@ -207,9 +225,21 @@ fn main() {
 
         for cube in cubes.iter() {
             let matrix = projection_view * cube.model_matrix;
+
+            let light_color: [f32; 3] = light.light_color.into();
+            let light_position: [f32; 3] = light.cube.position.into();
+            let ambient_color = [0.05, 0.05, 0.05f32];
+            let view_position: [f32; 3] = camera.position.into();
+
             let uniforms = uniform! {
                 matrix: matrix.to_array(),
+                model: cube.model_matrix.to_array(),
+
                 tex: &cube_object.texture,
+                light_color: light_color,
+                light_pos: light_position,
+                ambient_color: ambient_color,
+                view_pos: view_position
             };
             // draw cube
             target
@@ -217,6 +247,24 @@ fn main() {
                     &cube_object.vertex_buffer,
                     &cube_object.index_buffer,
                     &programs.textured_object,
+                    &uniforms,
+                    &params,
+                )
+                .unwrap();
+        }
+
+        {
+            let matrix = projection_view * light.cube.model_matrix;
+            let uniforms = uniform! {
+                matrix: matrix.to_array(),
+                color: [1.0, 1.0, 1.0f32]
+            };
+
+            target
+                .draw(
+                    &cube_object.vertex_buffer,
+                    &cube_object.index_buffer,
+                    &programs.light_object,
                     &uniforms,
                     &params,
                 )
