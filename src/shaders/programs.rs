@@ -1,11 +1,4 @@
-use glium::{Display, Program, uniforms::Uniforms};
-
-// todo
-// pub trait ShaderProgram {
-//     fn get_program(display: &Display) -> Program;
-//     type Input;
-//     fn get_uniforms(input: Self::Input) -> dyn Uniforms;
-// }
+use glium::{Display, Program};
 
 pub fn simple_textured_object(display: &Display) -> Program {
     let vertex_shader_src = r#"

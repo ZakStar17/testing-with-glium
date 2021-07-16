@@ -5,19 +5,24 @@ extern crate image;
 
 use cgmath::{Euler, Point3, Rad, Vector3};
 use glium::{glutin, Surface};
+use glutin::event::WindowEvent;
 
 mod camera;
 mod common;
+mod containers;
 mod objects;
 mod shaders;
 
 use camera::Camera;
-use common::ToArray;
+use containers::{
+    container::ObjectContainer,
+    simple_containers::{CubeContainer, CubeContainerDrawData, CubeContainerPrograms},
+};
 use objects::{
     object::Object,
     simple_objects::{Cube, SimpleLightCube},
 };
-use shaders::{programs, shader::ShaderObject, simple_shaders::CubeShader};
+use shaders::programs;
 
 struct Mouse {
     delta_x: f32,
@@ -51,29 +56,16 @@ fn main() {
         window.set_cursor_visible(false);
     }
 
-    // create a lot of cubes for testing
-    let row_cube_count: usize = 3; // odd number
-    let mut cubes: Vec<Cube> = Vec::with_capacity(row_cube_count.pow(3));
-    {
-        let a = ((row_cube_count - 1) * 2) as i32;
-        for x in (-a..=a).step_by(4) {
-            for y in (-a..=a).step_by(4) {
-                for z in (-a..=a).step_by(4) {
-                    cubes.push(Cube::new(Point3::new(x as f32, y as f32, z as f32)))
-                }
-            }
-        }
-    }
-    let cube_object = CubeShader::new(&display);
-
-    let light = {
+    let mut cube_container = CubeContainer::new(&display);
+    cube_container.generate_cubes();
+    cube_container.light_cubes.push({
         let cube = Cube::from_full(
             Point3::new(1.0, 2.0, 3.0),
             Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
             0.2,
         );
         SimpleLightCube::new(cube, Vector3::new(1.0, 1.0, 1.0))
-    };
+    });
 
     let programs = Programs {
         textured_object: programs::simple_textured_object(&display),
@@ -95,7 +87,6 @@ fn main() {
 
     let mut last_frame_time = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
-        use glutin::event::WindowEvent;
         match event {
             glutin::event::Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
@@ -223,53 +214,19 @@ fn main() {
             ..Default::default()
         };
 
-        for cube in cubes.iter() {
-            let matrix = projection_view * cube.model_matrix;
+        cube_container.draw(
+            &mut target,
+            CubeContainerPrograms {
+                cube: &programs.textured_object,
+                light_cube: &programs.light_object,
+            },
+            &params,
+            CubeContainerDrawData {
+                projection_view: &projection_view,
+                camera_pos: camera.position,
+            },
+        );
 
-            let light_color: [f32; 3] = light.light_color.into();
-            let light_position: [f32; 3] = light.cube.position.into();
-            let ambient_color = [0.05, 0.05, 0.05f32];
-            let view_position: [f32; 3] = camera.position.into();
-
-            let uniforms = uniform! {
-                matrix: matrix.to_array(),
-                model: cube.model_matrix.to_array(),
-
-                tex: &cube_object.texture,
-                light_color: light_color,
-                light_pos: light_position,
-                ambient_color: ambient_color,
-                view_pos: view_position
-            };
-            // draw cube
-            target
-                .draw(
-                    &cube_object.vertex_buffer,
-                    &cube_object.index_buffer,
-                    &programs.textured_object,
-                    &uniforms,
-                    &params,
-                )
-                .unwrap();
-        }
-
-        {
-            let matrix = projection_view * light.cube.model_matrix;
-            let uniforms = uniform! {
-                matrix: matrix.to_array(),
-                color: [1.0, 1.0, 1.0f32]
-            };
-
-            target
-                .draw(
-                    &cube_object.vertex_buffer,
-                    &cube_object.index_buffer,
-                    &programs.light_object,
-                    &uniforms,
-                    &params,
-                )
-                .unwrap();
-        }
         target.finish().unwrap();
 
         last_frame_time = current_frame_time;
