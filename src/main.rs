@@ -18,11 +18,8 @@ use containers::{
     container::ObjectContainer,
     simple_containers::{CubeContainer, CubeContainerDrawData, CubeContainerPrograms},
 };
-use objects::{
-    object::Object,
-    simple_objects::{Cube, SimpleLightCube},
-};
-use shaders::programs;
+use objects::simple_objects::SimpleLightCube;
+use shaders::{common::Light, programs};
 
 struct Mouse {
     delta_x: f32,
@@ -59,12 +56,16 @@ fn main() {
     let mut cube_container = CubeContainer::new(&display);
     cube_container.generate_cubes();
     cube_container.light_cubes.push({
-        let cube = Cube::from_full(
+        SimpleLightCube::new(
             Point3::new(1.0, 2.0, 3.0),
             Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
             0.2,
-        );
-        SimpleLightCube::new(cube, Vector3::new(1.0, 1.0, 1.0))
+            Light {
+                ambient: Vector3::new(0.2, 0.2, 0.2),
+                diffuse: Vector3::new(1.0, 1.0, 1.0),
+                specular: Vector3::new(1.0, 1.0, 1.0),
+            },
+        )
     });
 
     let programs = Programs {

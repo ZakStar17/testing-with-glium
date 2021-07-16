@@ -34,8 +34,16 @@ pub fn simple_textured_object(display: &Display) -> Program {
         out vec4 out_color;
         
         uniform sampler2D tex;
-        uniform vec3 light_color;
+
+        // I can't find a way to pass uniforms as structs
+        uniform vec3 material_diffuse;
+        uniform vec3 material_specular;
+        uniform float material_shininess;
+
         uniform vec3 light_pos;
+        uniform vec3 light_diffuse;
+        uniform vec3 light_specular;
+
         uniform vec3 ambient_color;
         uniform vec3 view_pos;
         
@@ -44,16 +52,18 @@ pub fn simple_textured_object(display: &Display) -> Program {
             vec3 norm = normalize(v_normal);
             vec3 light_direction = normalize(light_pos - v_frag_pos);
             float diff = max(dot(norm, light_direction), 0.0);
-            vec3 diffuse = diff * light_color;
 
             // specular
-            float specular_strength = 0.8;
             vec3 view_direction = normalize(view_pos - v_frag_pos);
             vec3 reflect_direction = reflect(-light_direction, norm);  
-            float spec = pow(max(dot(view_direction, reflect_direction), 0.0), 32);
-            vec3 specular = specular_strength * spec * light_color; 
+            float spec = pow(max(dot(view_direction, reflect_direction), 0.0), 
+                             material_shininess);
 
-            out_color = texture(tex, v_tex_coords) * vec4((ambient_color + diffuse + specular), 1.0);
+            vec3 ambient = ambient_color;
+            vec3 diffuse = light_diffuse * (diff * material_diffuse);
+            vec3 specular = light_specular * (spec * material_specular); 
+
+            out_color = texture(tex, v_tex_coords) * vec4((ambient + diffuse + specular), 1.0);
         }
     "#;
     //((texture(tex, v_tex_coords) * vec4(8.0, 8.0, 8.0, 1.0)) - vec4(1.9, 1.9, 1.9, 0.0)) * vec4(0.125, 0.125, 0.125, 1.0)
