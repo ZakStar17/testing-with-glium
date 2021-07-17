@@ -1,12 +1,10 @@
-use cgmath::{Matrix4, Point3, Vector3};
+use cgmath::{Matrix4, Point3};
 use glium::Surface;
 
 use crate::common::ToArray;
 use crate::containers::container::ObjectContainer;
-use crate::objects::{
-    simple_objects::{Cube, SimpleLightCube},
-};
-use crate::shaders::{common::Material, shader::ShaderObject, simple_shaders::CubeShader};
+use crate::objects::simple_objects::{Cube, SimpleLightCube};
+use crate::shaders::{programs, shader::ShaderObject, simple_shaders::CubeShader};
 
 pub struct CubeContainer {
     shader: CubeShader,
@@ -20,8 +18,8 @@ pub struct CubeContainerDrawData<'a> {
 }
 
 pub struct CubeContainerPrograms<'a, 'b> {
-    pub cube: &'a glium::Program,
-    pub light_cube: &'b glium::Program,
+    pub cube: &'a programs::SimpleTexturedObjectProgram,
+    pub light_cube: &'b programs::SimpleLightObjectProgram,
 }
 
 impl CubeContainer {
@@ -33,15 +31,8 @@ impl CubeContainer {
             for x in (-a..=a).step_by(4) {
                 for y in (-a..=a).step_by(4) {
                     for z in (-a..=a).step_by(4) {
-                        self.cubes.push(Cube::new(
-                            Point3::new(x as f32, y as f32, z as f32),
-                            Material {
-                                ambient: Vector3::new(1.0, 0.5, 0.31),
-                                diffuse: Vector3::new(1.0, 0.5, 0.31),
-                                specular: Vector3::new(0.5, 0.5, 0.5),
-                                shininess: 32.0,
-                            },
-                        ))
+                        self.cubes
+                            .push(Cube::new(Point3::new(x as f32, y as f32, z as f32)))
                     }
                 }
             }
@@ -51,7 +42,7 @@ impl CubeContainer {
     pub fn draw_cubes(
         &self,
         target: &mut glium::Frame,
-        program: &glium::Program,
+        program: &programs::SimpleTexturedObjectProgram,
         params: &glium::DrawParameters,
         projection_view: &Matrix4<f32>,
         camera_pos: Point3<f32>,
@@ -59,37 +50,29 @@ impl CubeContainer {
         for cube in self.cubes.iter() {
             let matrix = projection_view * cube.object.model_matrix;
 
-            let material_diffuse: [f32; 3] = cube.material.diffuse.into();
-            let material_specular: [f32; 3] = cube.material.specular.into();
+            let material = &self.shader.material;
+            let light = &self.light_cubes[0].light;
 
             let light_position: [f32; 3] = self.light_cubes[0].object.position.into();
-            let light_diffuse: [f32; 3] = self.light_cubes[0].light.diffuse.into();
-            let light_specular: [f32; 3] = self.light_cubes[0].light.specular.into();
+            let light_ambient: [f32; 3] = light.ambient.into();
+            let light_diffuse: [f32; 3] = light.diffuse.into();
+            let light_specular: [f32; 3] = light.specular.into();
 
-            let ambient_color = {
-                let mut temp = [0.0f32; 3];
-                for i in 0..3 {
-                    temp[i] = cube.material.ambient[i] * self.light_cubes[0].light.ambient[i]
-                }
-                temp
-            };
             let view_position: [f32; 3] = camera_pos.into();
 
             let uniforms = uniform! {
                 matrix: matrix.to_array(),
                 model: cube.object.model_matrix.to_array(),
 
-                tex: &self.shader.texture,
-
-                material_diffuse: material_diffuse,
-                material_specular: material_specular,
-                material_shininess: cube.material.shininess,
+                material_diffuse: &material.diffuse,
+                material_specular: &material.specular,
+                material_shininess: material.shininess,
 
                 light_pos: light_position,
+                light_ambient: light_ambient,
                 light_diffuse: light_diffuse,
                 light_specular: light_specular,
 
-                ambient_color: ambient_color,
                 view_pos: view_position
             };
 
@@ -98,7 +81,7 @@ impl CubeContainer {
                 .draw(
                     &self.shader.vertex_buffer,
                     &self.shader.index_buffer,
-                    program,
+                    &program.0,
                     &uniforms,
                     params,
                 )
@@ -109,7 +92,7 @@ impl CubeContainer {
     pub fn draw_light_cubes(
         &self,
         target: &mut glium::Frame,
-        program: &glium::Program,
+        program: &programs::SimpleLightObjectProgram,
         params: &glium::DrawParameters,
         projection_view: &Matrix4<f32>,
     ) {
@@ -126,7 +109,7 @@ impl CubeContainer {
             .draw(
                 &self.shader.vertex_buffer,
                 &self.shader.index_buffer,
-                program,
+                &program.0,
                 &uniforms,
                 params,
             )

@@ -3,12 +3,13 @@ use std::io::Cursor;
 use glium::{Display, IndexBuffer, Texture2d, VertexBuffer};
 
 use crate::common::Vertex;
-use crate::shaders::shader::{ShaderObject, Simple2dTexturedObject};
+use crate::shaders::common::Material;
+use crate::shaders::shader::{ShaderObject};
 
 pub struct CubeShader {
     pub vertex_buffer: VertexBuffer<Vertex>,
     pub index_buffer: IndexBuffer<u8>,
-    pub texture: Texture2d,
+    pub material: Material,
 }
 
 impl CubeShader {
@@ -77,7 +78,11 @@ impl ShaderObject for CubeShader {
         Self {
             vertex_buffer: Self::create_vertex_buffer(display),
             index_buffer: Self::create_index_buffer(display),
-            texture: Self::load_texture(display),
+            material: Material {
+                diffuse: Self::load_texture(display, &include_bytes!("../../assets/container2.png")),
+                specular: Self::load_texture(display, &include_bytes!("../../assets/container2_specular.png")),
+                shininess: 32.0,
+            },
         }
     }
 
@@ -98,10 +103,10 @@ impl ShaderObject for CubeShader {
     }
 }
 
-impl Simple2dTexturedObject for CubeShader {
-    fn load_texture(display: &Display) -> Texture2d {
+impl CubeShader {
+    fn load_texture(display: &Display, texture_bytes: &dyn std::convert::AsRef<[u8]>) -> Texture2d {
         let image = image::load(
-            Cursor::new(&include_bytes!("../../assets/wall.png")),
+            Cursor::new(texture_bytes),
             image::ImageFormat::Png,
         )
         .unwrap()

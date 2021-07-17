@@ -1,15 +1,14 @@
 use cgmath::{EuclideanSpace, Euler, Matrix4, Point3, Rad};
 
 use crate::objects::object::{create_model_matrix, Object};
-use crate::shaders::common::{Light, Material};
+use crate::shaders::common::Light;
 
 pub struct Cube {
     pub object: Object,
-    pub material: Material,
 }
 
 impl Cube {
-    pub fn new(position: Point3<f32>, material: Material) -> Cube {
+    pub fn new(position: Point3<f32>) -> Cube {
         let model_matrix = Matrix4::from_translation(position.to_vec());
 
         let object = Object {
@@ -23,15 +22,10 @@ impl Cube {
             model_matrix: model_matrix,
         };
 
-        Cube { object, material }
+        Cube { object }
     }
 
-    pub fn from_full(
-        position: Point3<f32>,
-        rotation: Euler<Rad<f32>>,
-        scale: f32,
-        material: Material,
-    ) -> Cube {
+    pub fn from_full(position: Point3<f32>, rotation: Euler<Rad<f32>>, scale: f32) -> Cube {
         let model_matrix = create_model_matrix(position, rotation, scale);
 
         Cube {
@@ -41,7 +35,6 @@ impl Cube {
                 scale,
                 model_matrix,
             },
-            material,
         }
     }
 }

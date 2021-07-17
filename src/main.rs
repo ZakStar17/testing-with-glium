@@ -29,8 +29,8 @@ struct Mouse {
 }
 
 struct Programs {
-    textured_object: glium::Program,
-    light_object: glium::Program,
+    textured_object: programs::SimpleTexturedObjectProgram,
+    light_object: programs::SimpleLightObjectProgram,
 }
 
 fn main() {
@@ -61,16 +61,16 @@ fn main() {
             Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
             0.2,
             Light {
-                ambient: Vector3::new(0.2, 0.2, 0.2),
-                diffuse: Vector3::new(1.0, 1.0, 1.0),
+                ambient: Vector3::new(0.05, 0.05, 0.05),
+                diffuse: Vector3::new(0.5, 0.5, 0.5),
                 specular: Vector3::new(1.0, 1.0, 1.0),
             },
         )
     });
 
     let programs = Programs {
-        textured_object: programs::simple_textured_object(&display),
-        light_object: programs::simple_light_object(&display),
+        textured_object: programs::SimpleTexturedObjectProgram::new(&display),
+        light_object: programs::SimpleLightObjectProgram::new(&display),
     };
 
     let mut camera = Camera::new(Point3::new(0.0, 0.0, 3.0));
