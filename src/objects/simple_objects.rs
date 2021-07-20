@@ -1,7 +1,7 @@
 use cgmath::{EuclideanSpace, Euler, Matrix4, Point3, Rad};
 
 use crate::objects::object::{create_model_matrix, Object};
-use crate::shaders::common::Light;
+use crate::shaders::common::PointLight;
 
 pub struct Cube {
     pub object: Object,
@@ -41,16 +41,16 @@ impl Cube {
 
 pub struct SimpleLightCube {
     pub object: Object,
-    pub light: Light,
+    pub light: PointLight,
 }
 
 impl SimpleLightCube {
-    pub fn new(position: Point3<f32>, rotation: Euler<Rad<f32>>, scale: f32, light: Light) -> Self {
-        let model_matrix = create_model_matrix(position, rotation, scale);
+    pub fn new(rotation: Euler<Rad<f32>>, scale: f32, light: PointLight) -> Self {
+        let model_matrix = create_model_matrix(light.position, rotation, scale);
 
         SimpleLightCube {
             object: Object {
-                position,
+                position: light.position,
                 rotation,
                 scale,
                 model_matrix,

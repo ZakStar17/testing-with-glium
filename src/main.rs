@@ -19,7 +19,10 @@ use containers::{
     simple_containers::{CubeContainer, CubeContainerDrawData, CubeContainerPrograms},
 };
 use objects::simple_objects::SimpleLightCube;
-use shaders::{common::Light, programs};
+use shaders::{
+    common::{PointLight, SpotLight},
+    programs,
+};
 
 struct Mouse {
     delta_x: f32,
@@ -53,20 +56,77 @@ fn main() {
         window.set_cursor_visible(false);
     }
 
-    let mut cube_container = CubeContainer::new(&display);
-    cube_container.generate_cubes();
-    cube_container.light_cubes.push({
-        SimpleLightCube::new(
+    let mut cube_container = {
+        let positions = [
             Point3::new(1.0, 2.0, 3.0),
-            Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
-            0.2,
-            Light {
-                ambient: Vector3::new(0.05, 0.05, 0.05),
-                diffuse: Vector3::new(0.5, 0.5, 0.5),
-                specular: Vector3::new(1.0, 1.0, 1.0),
-            },
-        )
-    });
+            Point3::new(4.0, 2.0, 7.0),
+            Point3::new(-2.0, 2.0, 0.0),
+            Point3::new(-5.0, 2.0, -3.0),
+        ];
+
+        let light_cubes = [
+            SimpleLightCube::new(
+                Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
+                0.2,
+                PointLight {
+                    position: positions[0],
+                    ambient: Vector3::new(0.002, 0.002, 0.002),
+                    diffuse: Vector3::new(0.5, 0.5, 0.5),
+                    specular: Vector3::new(0.5, 0.5, 0.5),
+                    constant: 1.0,
+                    linear: 0.35,
+                    quadratic: 0.44,
+                },
+            ),
+            SimpleLightCube::new(
+                Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
+                0.2,
+                PointLight {
+                    position: positions[1],
+
+                    ambient: Vector3::new(0.002, 0.002, 0.002),
+                    diffuse: Vector3::new(0.5, 0.5, 0.5),
+                    specular: Vector3::new(0.5, 0.5, 0.5),
+
+                    constant: 1.0,
+                    linear: 0.35,
+                    quadratic: 0.44,
+                },
+            ),
+            SimpleLightCube::new(
+                Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
+                0.2,
+                PointLight {
+                    position: positions[2],
+
+                    ambient: Vector3::new(0.002, 0.002, 0.002),
+                    diffuse: Vector3::new(0.5, 0.5, 0.5),
+                    specular: Vector3::new(0.5, 0.5, 0.5),
+
+                    constant: 1.0,
+                    linear: 0.35,
+                    quadratic: 0.44,
+                },
+            ),
+            SimpleLightCube::new(
+                Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)),
+                0.2,
+                PointLight {
+                    position: positions[3],
+
+                    ambient: Vector3::new(0.002, 0.002, 0.002),
+                    diffuse: Vector3::new(0.5, 0.5, 0.5),
+                    specular: Vector3::new(0.5, 0.5, 0.5),
+
+                    constant: 1.0,
+                    linear: 0.35,
+                    quadratic: 0.44,
+                },
+            ),
+        ];
+        CubeContainer::new(&display, light_cubes)
+    };
+    cube_container.generate_cubes();
 
     let programs = Programs {
         textured_object: programs::SimpleTexturedObjectProgram::new(&display),
@@ -74,6 +134,17 @@ fn main() {
     };
 
     let mut camera = Camera::new(Point3::new(0.0, 0.0, 3.0));
+
+    let mut spot_light = SpotLight {
+        position: camera.position,
+        direction: camera.front,
+        cut_off: 0.97629600712,
+        outer_cut_off: 0.953716950748,
+
+        ambient: Vector3::new(0.002, 0.002, 0.002),
+        diffuse: Vector3::new(0.5, 0.5, 0.5),
+        specular: Vector3::new(0.5, 0.5, 0.5),
+    };
 
     let mut projection_matrix = camera.get_projection_matrix(get_aspect_ratio(&display));
 
@@ -85,6 +156,9 @@ fn main() {
     };
 
     let mut pressed_keys = [false; 4];
+
+    let mut t: f32 = 0.01;
+    let mut flashlight = true;
 
     let mut last_frame_time = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
@@ -108,21 +182,47 @@ fn main() {
                         }
                         17 => {
                             // w
-                            pressed_keys[0] = was_pressed
+                            pressed_keys[0] = was_pressed;
                         }
                         30 => {
                             // a
-                            pressed_keys[1] = was_pressed
+                            pressed_keys[1] = was_pressed;
                         }
                         31 => {
                             // s
-                            pressed_keys[2] = was_pressed
+                            pressed_keys[2] = was_pressed;
                         }
                         32 => {
                             // d
-                            pressed_keys[3] = was_pressed
+                            pressed_keys[3] = was_pressed;
                         }
-                        _ => {}
+                        20 => {
+                            // t
+                            t += 0.01;
+                        }
+                        21 => {
+                            // y
+                            t -= 0.01;
+                        }
+                        38 => {
+                            // l
+                            if !was_pressed {
+                                flashlight = !flashlight;
+
+                                if flashlight {
+                                    spot_light.ambient = Vector3::new(0.002, 0.002, 0.002);
+                                    spot_light.diffuse = Vector3::new(0.5, 0.5, 0.5);
+                                    spot_light.specular = Vector3::new(0.5, 0.5, 0.5);
+                                } else {
+                                    spot_light.ambient = Vector3::new(0.0, 0.0, 0.0);
+                                    spot_light.diffuse = Vector3::new(0.0, 0.0, 0.0);
+                                    spot_light.specular = Vector3::new(0.0, 0.0, 0.0);
+                                }
+                            }
+                        }
+                        x => {
+                            println!("{}", x);
+                        }
                     }
                 }
                 #[allow(deprecated)]
@@ -199,6 +299,10 @@ fn main() {
         camera.handle_mouse_movement(mouse.delta_x, mouse.delta_y);
         camera.handle_keys(pressed_keys, delta_time);
 
+        // update spot_light
+        spot_light.position = camera.position;
+        spot_light.direction = camera.front;
+
         let mut target = display.draw();
         target.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
 
@@ -225,6 +329,8 @@ fn main() {
             CubeContainerDrawData {
                 projection_view: &projection_view,
                 camera_pos: camera.position,
+                spot_light: &spot_light,
+                t: t,
             },
         );
 
