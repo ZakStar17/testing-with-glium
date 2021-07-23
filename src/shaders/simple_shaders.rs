@@ -1,10 +1,10 @@
 use std::io::Cursor;
 
-use glium::{Display, IndexBuffer, Texture2d, VertexBuffer};
+use glium::{Display, IndexBuffer, texture::SrgbTexture2d, VertexBuffer};
 
 use crate::common::Vertex;
 use crate::shaders::common::Material;
-use crate::shaders::shader::{ShaderObject};
+use crate::shaders::shader::ShaderObject;
 
 pub struct CubeShader {
     pub vertex_buffer: VertexBuffer<Vertex>,
@@ -15,13 +15,13 @@ pub struct CubeShader {
 impl CubeShader {
     fn get_cube_shape() -> Vec<Vertex> {
         let positions = [
-            -1.0, -1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, -1.0, 1.0, -1.0,
-            -1.0, -1.0, -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
+            -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0,
+            -1.0, 1.0, -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
             1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, -1.0, -1.0, -1.0,
-            -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, -1.0,
-            -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, 1.0, -1.0,
+            -1.0, -1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0,
+            -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, -1.0, 1.0, -1.0,
             -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, -1.0, -1.0, -1.0, 1.0,
-            -1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0,
+            -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, -1.0, 1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0,
         ];
         let normals = [
             0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0, 0.0, -1.0, 0.0,
@@ -33,11 +33,11 @@ impl CubeShader {
             0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0,
         ];
         let tex_coords = [
-            0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0,
+            0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0,
             1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0,
-            1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0,
-            1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
+            1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,
+            1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
         ];
 
         let mut vertices: Vec<Vertex> = Vec::with_capacity(36);
@@ -79,8 +79,14 @@ impl ShaderObject for CubeShader {
             vertex_buffer: Self::create_vertex_buffer(display),
             index_buffer: Self::create_index_buffer(display),
             material: Material {
-                diffuse: Self::load_texture(display, &include_bytes!("../../assets/container2.png")),
-                specular: Self::load_texture(display, &include_bytes!("../../assets/container2_specular.png")),
+                diffuse: Self::load_texture(
+                    display,
+                    &include_bytes!("../../assets/container2.png"),
+                ),
+                specular: Self::load_texture(
+                    display,
+                    &include_bytes!("../../assets/container2_specular.png"),
+                ),
                 shininess: 32.0,
             },
         }
@@ -104,18 +110,15 @@ impl ShaderObject for CubeShader {
 }
 
 impl CubeShader {
-    fn load_texture(display: &Display, texture_bytes: &dyn std::convert::AsRef<[u8]>) -> Texture2d {
-        let image = image::load(
-            Cursor::new(texture_bytes),
-            image::ImageFormat::Png,
-        )
-        .unwrap()
-        .to_rgba8();
+    fn load_texture(display: &Display, texture_bytes: &dyn std::convert::AsRef<[u8]>) -> SrgbTexture2d {
+        let image = image::load(Cursor::new(texture_bytes), image::ImageFormat::Png)
+            .unwrap()
+            .to_rgba8();
 
         let image_dimensions = image.dimensions();
         let image =
             glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
 
-        glium::texture::Texture2d::new(display, image).unwrap()
+        SrgbTexture2d::new(display, image).unwrap()
     }
 }

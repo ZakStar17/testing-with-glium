@@ -61,7 +61,7 @@ fn main() {
             Point3::new(1.0, 2.0, 3.0),
             Point3::new(4.0, 2.0, 7.0),
             Point3::new(-2.0, 2.0, 0.0),
-            Point3::new(-5.0, 2.0, -3.0),
+            Point3::new(-5.1, 2.0, -3.1),
         ];
 
         let light_cubes = [
@@ -71,11 +71,11 @@ fn main() {
                 PointLight {
                     position: positions[0],
                     ambient: Vector3::new(0.002, 0.002, 0.002),
-                    diffuse: Vector3::new(0.5, 0.5, 0.5),
-                    specular: Vector3::new(0.5, 0.5, 0.5),
+                    diffuse: Vector3::new(1.0, 1.0, 1.0),
+                    specular: Vector3::new(1.0, 1.0, 1.0),
                     constant: 1.0,
-                    linear: 0.35,
-                    quadratic: 0.44,
+                    linear: 0.045,
+                    quadratic: 0.0075,
                 },
             ),
             SimpleLightCube::new(
@@ -85,12 +85,12 @@ fn main() {
                     position: positions[1],
 
                     ambient: Vector3::new(0.002, 0.002, 0.002),
-                    diffuse: Vector3::new(0.5, 0.5, 0.5),
-                    specular: Vector3::new(0.5, 0.5, 0.5),
+                    diffuse: Vector3::new(1.0, 1.0, 1.0),
+                    specular: Vector3::new(1.0, 1.0, 1.0),
 
                     constant: 1.0,
-                    linear: 0.35,
-                    quadratic: 0.44,
+                    linear: 0.045,
+                    quadratic: 0.0075,
                 },
             ),
             SimpleLightCube::new(
@@ -100,12 +100,12 @@ fn main() {
                     position: positions[2],
 
                     ambient: Vector3::new(0.002, 0.002, 0.002),
-                    diffuse: Vector3::new(0.5, 0.5, 0.5),
-                    specular: Vector3::new(0.5, 0.5, 0.5),
+                    diffuse: Vector3::new(1.0, 1.0, 1.0),
+                    specular: Vector3::new(1.0, 1.0, 1.0),
 
                     constant: 1.0,
-                    linear: 0.35,
-                    quadratic: 0.44,
+                    linear: 0.045,
+                    quadratic: 0.0075,
                 },
             ),
             SimpleLightCube::new(
@@ -115,12 +115,12 @@ fn main() {
                     position: positions[3],
 
                     ambient: Vector3::new(0.002, 0.002, 0.002),
-                    diffuse: Vector3::new(0.5, 0.5, 0.5),
-                    specular: Vector3::new(0.5, 0.5, 0.5),
+                    diffuse: Vector3::new(1.0, 1.0, 1.0),
+                    specular: Vector3::new(1.0, 1.0, 1.0),
 
                     constant: 1.0,
-                    linear: 0.35,
-                    quadratic: 0.44,
+                    linear: 0.045,
+                    quadratic: 0.0075,
                 },
             ),
         ];
@@ -141,9 +141,9 @@ fn main() {
         cut_off: 0.97629600712,
         outer_cut_off: 0.953716950748,
 
-        ambient: Vector3::new(0.002, 0.002, 0.002),
-        diffuse: Vector3::new(0.5, 0.5, 0.5),
-        specular: Vector3::new(0.5, 0.5, 0.5),
+        ambient: Vector3::new(0.02, 0.02, 0.02),
+        diffuse: Vector3::new(1.0, 1.0, 1.0),
+        specular: Vector3::new(1.0, 1.0, 1.0),
     };
 
     let mut projection_matrix = camera.get_projection_matrix(get_aspect_ratio(&display));
@@ -202,7 +202,9 @@ fn main() {
                         }
                         21 => {
                             // y
-                            t -= 0.01;
+                            if t > 0.0 {
+                                t -= 0.01;
+                            }
                         }
                         38 => {
                             // l
@@ -303,8 +305,42 @@ fn main() {
         spot_light.position = camera.position;
         spot_light.direction = camera.front;
 
-        let mut target = display.draw();
-        target.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+        let target = display.draw();
+        let size = target.get_dimensions();
+
+        // let render_buffer = glium::framebuffer::RenderBuffer::new(
+        //     &display,
+        //     glium::texture::UncompressedFloatFormat::U8U8U8U8,
+        //     size.0,
+        //     size.1,
+        // )
+        // .unwrap();
+
+        let render_buffer = glium::Texture2d::empty_with_format(
+            &display,
+            glium::texture::UncompressedFloatFormat::U8U8U8U8,
+            glium::texture::MipmapsOption::NoMipmap,
+            size.0,
+            size.1,
+        ).unwrap();
+
+        let depth_buffer = glium::framebuffer::DepthRenderBuffer::new(
+            &display,
+            glium::texture::DepthFormat::I24,
+            size.0,
+            size.1,
+        )
+        .unwrap();
+
+        let mut framebuffer = glium::framebuffer::SimpleFrameBuffer::with_depth_buffer(
+            &display,
+            &render_buffer,
+            &depth_buffer,
+        )
+        .unwrap();
+
+        framebuffer.clear_color_srgb_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+        // target.clear_depth(1.0);
 
         let view_matrix = camera.get_view_matrix();
 
@@ -316,11 +352,12 @@ fn main() {
                 write: true,
                 ..Default::default()
             },
+            backface_culling: glium::draw_parameters::BackfaceCullingMode::CullClockwise,
             ..Default::default()
         };
 
         cube_container.draw(
-            &mut target,
+            &mut framebuffer,
             CubeContainerPrograms {
                 cube: &programs.textured_object,
                 light_cube: &programs.light_object,
@@ -333,6 +370,23 @@ fn main() {
                 t: t,
             },
         );
+
+        // todo
+        // let uniforms = uniform!(
+        //     tex: &render_buffer
+        // );
+
+        // target.draw(
+        //     &self.shader.vertex_buffer,
+        //     &self.shader.index_buffer,
+        //     &program.0,
+        //     &uniforms,
+        //     params,
+        // )
+        // .unwrap();
+
+        // temporary
+        framebuffer.fill(&target, glium::uniforms::MagnifySamplerFilter::Linear);
 
         target.finish().unwrap();
 

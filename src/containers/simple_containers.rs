@@ -1,7 +1,6 @@
 use cgmath::{Matrix4, Point3, Vector3};
 use glium::Surface;
 
-use crate::common::ToArray;
 use crate::containers::container::ObjectContainer;
 use crate::objects::simple_objects::{Cube, SimpleLightCube};
 use crate::shaders::{
@@ -56,7 +55,7 @@ impl CubeContainer {
 
     pub fn draw_cubes(
         &self,
-        target: &mut glium::Frame,
+        target: &mut glium::framebuffer::SimpleFrameBuffer,
         program: &programs::SimpleTexturedObjectProgram,
         params: &glium::DrawParameters,
         projection_view: &Matrix4<f32>,
@@ -67,12 +66,17 @@ impl CubeContainer {
         for cube in self.cubes.iter() {
             let matrix = projection_view * cube.object.model_matrix;
 
-            let directional_light = DirectionalLight {
-                ambient: Vector3::new(t / 10.0, t / 10.0, t / 10.0),
-                diffuse: Vector3::new(t, t, t),
-                specular: Vector3::new(t, t, t),
+
+            let directional_light = {
+                let ambient = t / 3.0;
+                let diffuse = t;
+                let specular = t * 0.4 + 0.4;
+                DirectionalLight {
+                ambient: Vector3::new(ambient, ambient, ambient),
+                diffuse: Vector3::new(diffuse, diffuse, diffuse),
+                specular: Vector3::new(specular, specular, specular),
                 direction: Vector3::new(-0.2, -1.0, -0.3),
-            };
+            }};
 
             let lights = [
                 &self.light_cubes[0].light,
@@ -106,19 +110,15 @@ impl CubeContainer {
 
     pub fn draw_light_cubes(
         &self,
-        target: &mut glium::Frame,
+        target: &mut glium::framebuffer::SimpleFrameBuffer,
         program: &programs::SimpleLightObjectProgram,
         params: &glium::DrawParameters,
         projection_view: &Matrix4<f32>,
     ) {
         for light_cube in self.light_cubes.iter() {
             let matrix = projection_view * light_cube.object.model_matrix;
-            let color: [f32; 3] = light_cube.light.diffuse.into();
 
-            let uniforms = uniform! {
-                matrix: matrix.to_array(),
-                color: color
-            };
+            let uniforms = programs::SimpleLightObjectProgram::get_uniforms(&matrix, &light_cube.light.diffuse);
 
             target
                 .draw(
@@ -138,7 +138,7 @@ impl<'a> ObjectContainer<CubeContainerPrograms<'_, '_>, CubeContainerDrawData<'_
 {
     fn draw(
         &self,
-        target: &mut glium::Frame,
+        target: &mut glium::framebuffer::SimpleFrameBuffer,
         programs: CubeContainerPrograms,
         params: &glium::DrawParameters,
         data: CubeContainerDrawData,

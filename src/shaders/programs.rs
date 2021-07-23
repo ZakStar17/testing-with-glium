@@ -1,4 +1,4 @@
-use cgmath::{Matrix4, Point3};
+use cgmath::{Matrix4, Point3, Vector3};
 use glium::{uniforms::UniformValue, Display, Program};
 
 use crate::common::ToArray;
@@ -24,11 +24,11 @@ impl glium::uniforms::Uniforms for SimpleTexturedObjectUniforms<'_, '_, '_, '_, 
         // todo: use a macro or something to simplify this redundant code
         f(
             "material.diffuse",
-            UniformValue::Texture2d(&self.material.diffuse, None),
+            UniformValue::SrgbTexture2d(&self.material.diffuse, None),
         );
         f(
             "material.specular",
-            UniformValue::Texture2d(&self.material.specular, None),
+            UniformValue::SrgbTexture2d(&self.material.specular, None),
         );
         f(
             "material.shininess",
@@ -195,9 +195,7 @@ impl SimpleTexturedObjectProgram {
     
             uniform vec3 view_pos;
 
-            // unoptimized
-
-            vec3 calculate_directional_light(DirectionalLight light, vec3 normal, vec3 view_direction) {
+            vec3 calculate_directional_light(DirectionalLight light, vec3 normal, vec3 view_direction, vec3 tex_diffuse, vec3 tex_specular) {
                 vec3 light_dir = normalize(-light.direction);
 
                 // diffuse shading
@@ -209,14 +207,14 @@ impl SimpleTexturedObjectProgram {
                                  material.shininess);
 
                 // combine results
-                vec3 ambient = light.ambient * vec3(texture(material.diffuse, v_tex_coords));
-                vec3 diffuse = light.diffuse * diff * vec3(texture(material.diffuse, v_tex_coords));
-                vec3 specular = light.specular * spec * vec3(texture(material.specular, v_tex_coords));
+                vec3 ambient = light.ambient * tex_diffuse;
+                vec3 diffuse = light.diffuse * diff * tex_diffuse;
+                vec3 specular = light.specular * spec * tex_specular; 
                 return (ambient + diffuse + specular);
             }
 
 
-            vec3 calculate_spot_light(SpotLight light, vec3 normal, vec3 frag_pos, vec3 view_direction) {
+            vec3 calculate_spot_light(SpotLight light, vec3 normal, vec3 frag_pos, vec3 view_direction, vec3 tex_diffuse, vec3 tex_specular) {
                 // diffuse
                 vec3 light_direction = normalize(light.position - frag_pos);
                 float diff = max(dot(normal, light_direction), 0.0);
@@ -225,9 +223,6 @@ impl SimpleTexturedObjectProgram {
                 vec3 reflect_direction = reflect(-light_direction, normal);  
                 float spec = pow(max(dot(view_direction, reflect_direction), 0.0), 
                                  material.shininess);
-    
-                vec3 tex_diffuse = vec3(texture(material.diffuse, v_tex_coords));
-                vec3 tex_specular = vec3(texture(material.specular, v_tex_coords));
 
                 vec3 ambient = light.ambient * tex_diffuse;
                 vec3 diffuse = light.diffuse * diff * tex_diffuse;
@@ -244,7 +239,7 @@ impl SimpleTexturedObjectProgram {
             }
 
 
-            vec3 calculate_point_light(PointLight light, vec3 normal, vec3 frag_pos, vec3 view_direction) {
+            vec3 calculate_point_light(PointLight light, vec3 normal, vec3 frag_pos, vec3 view_direction, vec3 tex_diffuse, vec3 tex_specular) {
                 // diffuse
                 vec3 light_direction = normalize(light.position - frag_pos);
                 float diff = max(dot(normal, light_direction), 0.0);
@@ -253,9 +248,6 @@ impl SimpleTexturedObjectProgram {
                 vec3 reflect_direction = reflect(-light_direction, normal);  
                 float spec = pow(max(dot(view_direction, reflect_direction), 0.0), 
                                  material.shininess);
-    
-                vec3 tex_diffuse = vec3(texture(material.diffuse, v_tex_coords));
-                vec3 tex_specular = vec3(texture(material.specular, v_tex_coords));
 
                 vec3 ambient = light.ambient * tex_diffuse;
                 vec3 diffuse = light.diffuse * diff * tex_diffuse;
@@ -279,13 +271,16 @@ impl SimpleTexturedObjectProgram {
                 vec3 norm = normalize(v_normal);
                 vec3 view_direction = normalize(view_pos - v_frag_pos);
 
-                vec3 result = calculate_directional_light(directional_light, norm, view_direction);
+                vec3 tex_diffuse = vec3(texture(material.diffuse, v_tex_coords));
+                vec3 tex_specular = vec3(texture(material.specular, v_tex_coords));
+
+                vec3 result = calculate_directional_light(directional_light, norm, view_direction, tex_diffuse, tex_specular);
 
                 for(int i = 0; i < NR_POINT_LIGHTS; i++) {
-                    result += calculate_point_light(point_lights[i], norm, v_frag_pos, view_direction);
+                    result += calculate_point_light(point_lights[i], norm, v_frag_pos, view_direction, tex_diffuse, tex_specular);
                 }
 
-                result += calculate_spot_light(spot_light, norm, v_frag_pos, view_direction);
+                result += calculate_spot_light(spot_light, norm, v_frag_pos, view_direction, tex_diffuse, tex_specular);
                 
                 out_color = vec4(result, 1.0);
             }
@@ -318,6 +313,22 @@ impl SimpleTexturedObjectProgram {
 
 pub struct SimpleLightObjectProgram(pub Program);
 
+pub struct SimpleLightObjectUniforms<'a, 'b> {
+    matrix: &'a Matrix4<f32>,
+    color: &'b Vector3<f32>,
+}
+
+impl glium::uniforms::Uniforms for SimpleLightObjectUniforms<'_, '_> {
+    fn visit_values<'a, F: FnMut(&str, UniformValue<'a>)>(&'a self, mut f: F) {
+        f("matrix", UniformValue::Mat4(self.matrix.to_array()));
+
+        f(
+            "color",
+            UniformValue::Vec3([self.color.x, self.color.y, self.color.z]),
+        );
+    }
+}
+
 impl SimpleLightObjectProgram {
     pub fn new(display: &Display) -> SimpleLightObjectProgram {
         let vertex_shader_src = r#"
@@ -347,5 +358,12 @@ impl SimpleLightObjectProgram {
         SimpleLightObjectProgram(
             Program::from_source(display, vertex_shader_src, fragment_shader_src, None).unwrap(),
         )
+    }
+
+    pub fn get_uniforms<'a, 'b>(
+        matrix: &'a Matrix4<f32>,
+        color: &'b Vector3<f32>,
+    ) -> SimpleLightObjectUniforms<'a, 'b> {
+        SimpleLightObjectUniforms { matrix, color }
     }
 }
