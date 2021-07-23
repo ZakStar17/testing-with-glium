@@ -39,3 +39,22 @@ pub struct SpotLight {
     pub diffuse: Vector3<f32>,
     pub specular: Vector3<f32>,
 }
+
+#[derive(Copy, Clone)]
+pub struct Vertex3d {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    pub tex_coords: [f32; 2],
+}
+
+#[derive(Copy, Clone)]
+pub struct Vertex2d {
+    pub position: [f32; 2],
+    pub tex_coords: [f32; 2],
+}
+
+#[allow(dead_code)]
+pub fn main() {
+    implement_vertex!(Vertex3d, position, normal, tex_coords);
+    implement_vertex!(Vertex2d, position, tex_coords);
+}

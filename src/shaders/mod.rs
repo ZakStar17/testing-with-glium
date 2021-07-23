@@ -1,4 +1,4 @@
 pub mod programs;
 pub mod simple_shaders;
-pub mod shader;
 pub mod common;
+pub mod main_framebuffer_shader;

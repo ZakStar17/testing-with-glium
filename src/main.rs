@@ -22,6 +22,7 @@ use objects::simple_objects::SimpleLightCube;
 use shaders::{
     common::{PointLight, SpotLight},
     programs,
+    programs::PostProcessingEffects,
 };
 
 struct Mouse {
@@ -34,6 +35,7 @@ struct Mouse {
 struct Programs {
     textured_object: programs::SimpleTexturedObjectProgram,
     light_object: programs::SimpleLightObjectProgram,
+    main_framebuffer: programs::MainFramebufferProgram,
 }
 
 fn main() {
@@ -128,9 +130,26 @@ fn main() {
     };
     cube_container.generate_cubes();
 
-    let programs = Programs {
+    let main_framebuffer_shader =
+        crate::shaders::main_framebuffer_shader::MainFramebufferShader::new(&display);
+
+    let post_processing_effects = [
+        PostProcessingEffects::NoPostProcessing,
+        PostProcessingEffects::Inversed,
+        PostProcessingEffects::GrayScale,
+        PostProcessingEffects::DeepFried,
+        PostProcessingEffects::Blur,
+        PostProcessingEffects::Edged,
+    ];
+    let mut selected_post_processing_effect_i = 0;
+
+    let mut programs = Programs {
         textured_object: programs::SimpleTexturedObjectProgram::new(&display),
         light_object: programs::SimpleLightObjectProgram::new(&display),
+        main_framebuffer: programs::MainFramebufferProgram::new(
+            &display,
+            &post_processing_effects[selected_post_processing_effect_i],
+        ),
     };
 
     let mut camera = Camera::new(Point3::new(0.0, 0.0, 3.0));
@@ -206,11 +225,43 @@ fn main() {
                                 t -= 0.01;
                             }
                         }
+                        44 => {
+                            // z
+                            if !was_pressed {
+                                if selected_post_processing_effect_i == 0 {
+                                    selected_post_processing_effect_i =
+                                        post_processing_effects.len() - 1;
+                                } else {
+                                    selected_post_processing_effect_i -= 1
+                                }
+                                programs.main_framebuffer = programs::MainFramebufferProgram::new(
+                                    &display,
+                                    &post_processing_effects[selected_post_processing_effect_i],
+                                );
+                            }
+                        }
+                        45 => {
+                            // x
+                            if !was_pressed {
+                                if selected_post_processing_effect_i
+                                    == post_processing_effects.len() - 1
+                                {
+                                    selected_post_processing_effect_i = 0;
+                                } else {
+                                    selected_post_processing_effect_i += 1
+                                }
+                                programs.main_framebuffer = programs::MainFramebufferProgram::new(
+                                    &display,
+                                    &post_processing_effects[selected_post_processing_effect_i],
+                                );
+                            }
+                        }
                         38 => {
                             // l
                             if !was_pressed {
                                 flashlight = !flashlight;
 
+                                // todo: repeated code
                                 if flashlight {
                                     spot_light.ambient = Vector3::new(0.002, 0.002, 0.002);
                                     spot_light.diffuse = Vector3::new(0.5, 0.5, 0.5);
@@ -305,24 +356,17 @@ fn main() {
         spot_light.position = camera.position;
         spot_light.direction = camera.front;
 
-        let target = display.draw();
+        let mut target = display.draw();
         let size = target.get_dimensions();
 
-        // let render_buffer = glium::framebuffer::RenderBuffer::new(
-        //     &display,
-        //     glium::texture::UncompressedFloatFormat::U8U8U8U8,
-        //     size.0,
-        //     size.1,
-        // )
-        // .unwrap();
-
-        let render_buffer = glium::Texture2d::empty_with_format(
+        let render_texture = glium::Texture2d::empty_with_format(
             &display,
             glium::texture::UncompressedFloatFormat::U8U8U8U8,
             glium::texture::MipmapsOption::NoMipmap,
             size.0,
             size.1,
-        ).unwrap();
+        )
+        .unwrap();
 
         let depth_buffer = glium::framebuffer::DepthRenderBuffer::new(
             &display,
@@ -334,7 +378,7 @@ fn main() {
 
         let mut framebuffer = glium::framebuffer::SimpleFrameBuffer::with_depth_buffer(
             &display,
-            &render_buffer,
+            &render_texture,
             &depth_buffer,
         )
         .unwrap();
@@ -371,23 +415,18 @@ fn main() {
             },
         );
 
-        // todo
-        // let uniforms = uniform!(
-        //     tex: &render_buffer
-        // );
-
-        // target.draw(
-        //     &self.shader.vertex_buffer,
-        //     &self.shader.index_buffer,
-        //     &program.0,
-        //     &uniforms,
-        //     params,
-        // )
-        // .unwrap();
-
-        // temporary
-        framebuffer.fill(&target, glium::uniforms::MagnifySamplerFilter::Linear);
-
+        // draw framebuffer to target (with post processing effects)
+        target.clear_depth(1.0);
+        let uniforms = programs::MainFramebufferProgram::get_uniforms(&render_texture);
+        target
+            .draw(
+                &main_framebuffer_shader.vertex_buffer,
+                &main_framebuffer_shader.index_buffer,
+                &programs.main_framebuffer.0,
+                &uniforms,
+                &params,
+            )
+            .unwrap();
         target.finish().unwrap();
 
         last_frame_time = current_frame_time;

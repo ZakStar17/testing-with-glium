@@ -6,7 +6,6 @@ use crate::objects::simple_objects::{Cube, SimpleLightCube};
 use crate::shaders::{
     common::{DirectionalLight, SpotLight},
     programs,
-    shader::ShaderObject,
     simple_shaders::CubeShader,
 };
 

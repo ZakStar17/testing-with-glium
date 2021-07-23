@@ -367,3 +367,177 @@ impl SimpleLightObjectProgram {
         SimpleLightObjectUniforms { matrix, color }
     }
 }
+
+pub struct MainFramebufferProgram(pub Program);
+
+pub struct MainFramebufferProgramUniforms<'a> {
+    screen_texture: &'a glium::texture::Texture2d,
+}
+
+impl glium::uniforms::Uniforms for MainFramebufferProgramUniforms<'_> {
+    fn visit_values<'a, F: FnMut(&str, UniformValue<'a>)>(&'a self, mut f: F) {
+        f(
+            "screen_texture",
+            UniformValue::Texture2d(self.screen_texture, None),
+        );
+    }
+}
+
+pub enum PostProcessingEffects {
+    NoPostProcessing,
+    Inversed,
+    GrayScale,
+    DeepFried,
+    Blur,
+    Edged,
+}
+
+impl MainFramebufferProgram {
+    pub fn new(
+        display: &Display,
+        post_processing_effect: &PostProcessingEffects,
+    ) -> MainFramebufferProgram {
+        let vertex_shader_src = r#"
+            #version 330 core
+
+            in vec2 tex_coords;
+            in vec2 position;
+
+            out vec2 v_tex_coords;
+
+            void main() {
+                gl_Position = vec4(position.x, position.y, 0.0, 1.0);
+                v_tex_coords = tex_coords;
+            }
+        "#;
+
+        // todo: fix weir border effects while using kernels
+
+        let kernel_code;
+        let main_code = match post_processing_effect {
+            PostProcessingEffects::NoPostProcessing => {
+                r#"
+                void main() {
+                    out_color = texture(screen_texture, v_tex_coords);
+                }
+            "#
+            }
+            PostProcessingEffects::Inversed => {
+                r#"
+                void main() {
+                    out_color = vec4(vec3(1.0 - texture(screen_texture, v_tex_coords)), 1.0);
+                }
+            "#
+            }
+            PostProcessingEffects::GrayScale => {
+                r#"
+                void main() {
+                    out_color = texture(screen_texture, v_tex_coords);
+                    float average = 0.2126 * out_color.r + 0.7152 * out_color.g + 0.0722 * out_color.b;
+                    out_color = vec4(average, average, average, 1.0);
+                }
+            "#
+            }
+            PostProcessingEffects::DeepFried => {
+                kernel_code = from_kernel_template([
+                    [-1.0, -1.0, -1.0],
+                    [-1.0, 9.0, -1.0],
+                    [-1.0, -1.0, -1.0],
+                ]);
+                &kernel_code
+            }
+            PostProcessingEffects::Blur => {
+                kernel_code = from_kernel_template([
+                    [1.0 / 16.0, 2.0 / 16.0, 1.0 / 16.0],
+                    [2.0 / 16.0, 4.0 / 16.0, 2.0 / 16.0],
+                    [1.0 / 16.0, 2.0 / 16.0, 1.0 / 16.0],
+                ]);
+                &kernel_code
+            }
+            PostProcessingEffects::Edged => {
+                kernel_code =
+                    from_kernel_template([[1.0, 1.0, 1.0], [1.0, -8.0, 1.0], [1.0, 1.0, 1.0]]);
+                &kernel_code
+            }
+        };
+
+        let fragment_shader_src = format!(
+            r#"
+            #version 330 core
+
+            in vec2 v_tex_coords;
+
+            out vec4 out_color;
+
+            uniform sampler2D screen_texture;
+
+            {}
+        "#,
+            main_code
+        );
+
+        MainFramebufferProgram(
+            Program::from_source(display, vertex_shader_src, &fragment_shader_src, None).unwrap(),
+        )
+    }
+
+    pub fn get_uniforms<'a, 'b>(
+        screen_texture: &'a glium::texture::Texture2d,
+    ) -> MainFramebufferProgramUniforms<'a> {
+        MainFramebufferProgramUniforms { screen_texture }
+    }
+}
+
+fn from_kernel_template(kernel: [[f32; 3]; 3]) -> String {
+    let kernel_str = format!(
+        r#"
+        float kernel[9] = float[](
+            {}, {}, {},
+            {}, {}, {},
+            {}, {}, {}
+        );
+    "#,
+        kernel[0][0],
+        kernel[0][1],
+        kernel[0][2],
+        kernel[1][0],
+        kernel[1][1],
+        kernel[1][2],
+        kernel[2][0],
+        kernel[2][1],
+        kernel[2][2]
+    );
+
+    format!(
+        r#"
+    const float offset = 1.0 / 300.0;
+
+    void main() {{
+        vec2 offsets[9] = vec2[](
+            vec2(-offset, offset), // top-left
+            vec2( 0.0f, offset), // top-center
+            vec2( offset, offset), // top-right
+            vec2(-offset, 0.0f), // center-left
+            vec2( 0.0f, 0.0f), // center-center
+            vec2( offset, 0.0f), // center-right
+            vec2(-offset, -offset), // bottom-left
+            vec2( 0.0f, -offset), // bottom-center
+            vec2( offset, -offset) // bottom-right
+        );
+
+        {}
+
+        vec3 sampleTex[9];
+        for(int i = 0; i < 9; i++) {{
+            sampleTex[i] = vec3(texture(screen_texture, v_tex_coords.st +
+            offsets[i]));
+        }}
+        vec3 col = vec3(0.0);
+        for(int i = 0; i < 9; i++)
+            col += sampleTex[i] * kernel[i];
+        out_color = vec4(col, 1.0);
+    }}
+"#,
+        kernel_str
+    )
+}
