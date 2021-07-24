@@ -37,7 +37,7 @@ impl Camera {
         PerspectiveFov {
             fovy: Rad(self.fov),
             aspect: aspect_ratio,
-            far: 100.0,
+            far: 1000.0,
             near: 0.1,
         }
         .into()

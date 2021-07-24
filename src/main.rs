@@ -24,6 +24,7 @@ use shaders::{
     programs,
     programs::PostProcessingEffects,
 };
+use common::ToArray;
 
 struct Mouse {
     delta_x: f32,
@@ -36,6 +37,7 @@ struct Programs {
     textured_object: programs::SimpleTexturedObjectProgram,
     light_object: programs::SimpleLightObjectProgram,
     main_framebuffer: programs::MainFramebufferProgram,
+    skybox: programs::SkyBoxProgram,
 }
 
 fn main() {
@@ -49,14 +51,6 @@ fn main() {
         let cb = glutin::ContextBuilder::new().with_depth_buffer(24);
         glium::Display::new(wb, cb, &event_loop).unwrap()
     };
-
-    {
-        // window configuration
-        let gl_window = display.gl_window();
-        let window = gl_window.window();
-        window.set_cursor_grab(true).unwrap();
-        window.set_cursor_visible(false);
-    }
 
     let mut cube_container = {
         let positions = [
@@ -129,9 +123,14 @@ fn main() {
         CubeContainer::new(&display, light_cubes)
     };
     cube_container.generate_cubes();
+    println!("Created cubes");
 
     let main_framebuffer_shader =
         crate::shaders::main_framebuffer_shader::MainFramebufferShader::new(&display);
+
+    let skybox_shader = crate::shaders::cubemap::CubeMapShader::new(&display);
+    println!("Loaded Scene shaders");
+    // crate::shaders::cubemap::CubeMapShader::test(&display);
 
     let post_processing_effects = [
         PostProcessingEffects::NoPostProcessing,
@@ -150,7 +149,9 @@ fn main() {
             &display,
             &post_processing_effects[selected_post_processing_effect_i],
         ),
+        skybox: programs::SkyBoxProgram::new(&display),
     };
+    println!("Loaded Programs");
 
     let mut camera = Camera::new(Point3::new(0.0, 0.0, 3.0));
 
@@ -176,8 +177,16 @@ fn main() {
 
     let mut pressed_keys = [false; 4];
 
-    let mut t: f32 = 0.01;
+    let mut t: f32 = 0.5;
     let mut flashlight = true;
+
+    {
+        // window configuration
+        let gl_window = display.gl_window();
+        let window = gl_window.window();
+        window.set_cursor_grab(true).unwrap();
+        window.set_cursor_visible(false);
+    }
 
     let mut last_frame_time = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
@@ -256,8 +265,8 @@ fn main() {
                                 );
                             }
                         }
-                        38 => {
-                            // l
+                        33 => {
+                            // f
                             if !was_pressed {
                                 flashlight = !flashlight;
 
@@ -273,8 +282,18 @@ fn main() {
                                 }
                             }
                         }
+                        42 => {
+                            // lshift
+                            // todo: repeated code
+                            if was_pressed {
+                                camera.speed = 30.0;
+                            } 
+                            else {
+                                camera.speed = 4.0;
+                            }
+                        }
                         x => {
-                            println!("{}", x);
+                            println!("Key n. {} was pressed", x);
                         }
                     }
                 }
@@ -383,8 +402,8 @@ fn main() {
         )
         .unwrap();
 
-        framebuffer.clear_color_srgb_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
-        // target.clear_depth(1.0);
+        // framebuffer.clear_color_srgb_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+        framebuffer.clear_depth(1.0);
 
         let view_matrix = camera.get_view_matrix();
 
@@ -392,7 +411,7 @@ fn main() {
 
         let params = glium::DrawParameters {
             depth: glium::Depth {
-                test: glium::draw_parameters::DepthTest::IfLess,
+                test: glium::draw_parameters::DepthTest::IfLessOrEqual,
                 write: true,
                 ..Default::default()
             },
@@ -414,6 +433,26 @@ fn main() {
                 t: t,
             },
         );
+
+        // draw skybox
+        {
+            let matrix = projection_view * crate::objects::object::create_model_matrix(camera.position, Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)), 1200.0);
+
+            let skybox_uniforms = uniform! {
+                matrix: matrix.to_array(),
+                cubetex: skybox_shader.cubemap.sampled().magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear),
+           };
+            framebuffer
+                .draw(
+                    &skybox_shader.vertex_buffer,
+                    &skybox_shader.index_buffer,
+                    &programs.skybox.0,
+                    &skybox_uniforms,
+                    &params,
+                )
+                .unwrap();
+        }
+
 
         // draw framebuffer to target (with post processing effects)
         target.clear_depth(1.0);

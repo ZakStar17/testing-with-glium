@@ -541,3 +541,43 @@ fn from_kernel_template(kernel: [[f32; 3]; 3]) -> String {
         kernel_str
     )
 }
+
+pub struct SkyBoxProgram(pub Program);
+
+impl SkyBoxProgram {
+    pub fn new(display: &Display) -> SkyBoxProgram {
+        let vertex_shader_src = r#"
+            #version 140
+
+            in vec3 position;
+
+            out vec3 texture_coords;
+
+            uniform mat4 matrix;
+
+            void main() {
+                texture_coords = position;
+                vec4 pos = matrix * vec4(position, 1.0);
+                gl_Position = pos.xyww;
+            }
+        "#;
+
+        let fragment_shader_src = r#"
+            #version 140
+
+            in vec3 texture_coords;
+
+            out vec4 out_color;
+
+            uniform samplerCube cubetex;
+
+            void main() {
+                out_color = texture(cubetex, texture_coords);
+            }
+        "#;
+
+        SkyBoxProgram(
+            Program::from_source(display, vertex_shader_src, &fragment_shader_src, None).unwrap(),
+        )
+    }
+}

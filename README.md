@@ -8,8 +8,8 @@ Currently: Following the tutorial at https://learnopengl.com/
 - AWSD: Movement;
 - Mouse: Look around (you can zoom with your mouse wheel)
 - Z / X: Change post processing effect (super secret setting)
-- T / Y: Add / Remove power from the invisible sun
+- T / Y: Add / Remove power from the sun (this doesn't affect the skybox yet)
+- F: Toggle on / off flashlight (the default is on)
 
 # Next Steps:
-- Add a Cubemap
 - Adjust the lighting values so it's more realistic
