@@ -4,9 +4,8 @@ extern crate cgmath;
 extern crate image;
 extern crate num_traits;
 
+use crate::containers::renderable_3d_object_container::{Renderable3dObjectContainer, Renderable3dObjectContainerDrawData};
 use crate::objects::kakyoin::Kakyoin;
-use crate::containers::kakyoin_container::KakyoinContainerDrawData;
-use crate::containers::kakyoin_container::KakyoinContainerPrograms;
 use cgmath::{Euler, Point3, Rad, Vector3};
 use glium::{glutin, Surface};
 use glutin::event::WindowEvent;
@@ -21,7 +20,6 @@ use camera::Camera;
 use containers::{
     container::ObjectContainer,
     simple_containers::{CubeContainer, CubeContainerDrawData, CubeContainerPrograms},
-    kakyoin_container::KakyoinContainer
 };
 use objects::simple_objects::SimpleLightCube;
 use shaders::{
@@ -131,19 +129,21 @@ fn main() {
     cube_container.generate_cubes();
     println!("Created cubes");
 
-    let mut kakyoin_container = KakyoinContainer::new(&display);
+    let mut kakyoin_container: Renderable3dObjectContainer<Kakyoin> = 
+        Renderable3dObjectContainer::new(
+            &display, 
+            "./assets/objects/kakyoin/kakyoin.obj", 
+            &include_bytes!("../assets/objects/kakyoin/Kakyoin.png")
+        );
 
-    kakyoin_container.kakyoins.push(Kakyoin::new(Point3::new(5.0, 2.0, 10.0)));
-
+    kakyoin_container.objects.push(Kakyoin::new(Point3::new(5.0, 2.0, 10.0)));
     println!("Loaded kakyoins");
-
 
     let main_framebuffer_shader =
         crate::shaders::main_framebuffer_shader::MainFramebufferShader::new(&display);
 
     let skybox_shader = crate::shaders::cubemap::CubeMapShader::new(&display);
     println!("Loaded Scene shaders");
-    // crate::shaders::cubemap::CubeMapShader::test(&display);
 
     let post_processing_effects = [
         PostProcessingEffects::NoPostProcessing,
@@ -166,6 +166,7 @@ fn main() {
     };
     println!("Loaded Programs");
 
+    // GAME VARIABLES
     let mut camera = Camera::new(Point3::new(0.0, 0.0, 3.0));
 
     let mut spot_light = SpotLight {
@@ -190,8 +191,9 @@ fn main() {
 
     let mut pressed_keys = [false; 4];
 
-    let mut directional_light: f32 = 0.5;
+    let mut directional_light_intensity: f32 = 0.5;
     let mut flashlight = true;
+    let mut time = 0.0;
 
     {
         // window configuration
@@ -200,8 +202,6 @@ fn main() {
         window.set_cursor_grab(true).unwrap();
         window.set_cursor_visible(false);
     }
-
-    let mut time = 0.0;
 
     let mut last_frame_time = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
@@ -241,12 +241,12 @@ fn main() {
                         }
                         20 => {
                             // t
-                            directional_light += 0.01;
+                            directional_light_intensity += 0.01;
                         }
                         21 => {
                             // y
-                            if directional_light > 0.0 {
-                                directional_light -= 0.01;
+                            if directional_light_intensity > 0.0 {
+                                directional_light_intensity -= 0.01;
                             }
                         }
                         44 => {
@@ -383,12 +383,12 @@ fn main() {
         let current_frame_time = std::time::Instant::now();
         let delta_time = current_frame_time - last_frame_time;
 
-        kakyoin_container.kakyoins[0].object.rotation = Euler {
+        kakyoin_container.objects[0].object.rotation = Euler {
             x: Rad(time),
             y: Rad(time / 2.0),
             z: Rad(time / 3.0),
         };
-        kakyoin_container.kakyoins[0].object.update_model();
+        kakyoin_container.objects[0].object.update_model();
 
         camera.handle_mouse_movement(mouse.delta_x, mouse.delta_y);
         camera.handle_keys(pressed_keys, delta_time);
@@ -455,7 +455,7 @@ fn main() {
                 projection_view: &projection_view,
                 camera_pos: camera.position,
                 spot_light: &spot_light,
-                t: directional_light,
+                t: directional_light_intensity,
             },
         );
 
@@ -468,22 +468,20 @@ fn main() {
 
         kakyoin_container.draw(
             &mut framebuffer,
-            KakyoinContainerPrograms {
-                kakyoin: &programs.textured_object,
-            },
+            &programs.textured_object,
             &params,
-            KakyoinContainerDrawData {
+            Renderable3dObjectContainerDrawData {
                 projection_view: &projection_view,
                 camera_pos: camera.position,
                 spot_light: &spot_light,
                 point_lights: &ligths,
-                t: directional_light,
+                directional_light_intensity: directional_light_intensity,
             },
         );
 
         // draw skybox
         {
-            let matrix = projection_view * crate::objects::object::create_model_matrix(camera.position, Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)), 1200.0);
+            let matrix = projection_view * crate::objects::renderable_3d_object::create_model_matrix(camera.position, Euler::new(Rad(0.0), Rad(0.0), Rad(0.0)), 1200.0);
 
             let skybox_uniforms = uniform! {
                 matrix: matrix.to_array(),

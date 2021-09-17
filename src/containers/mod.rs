@@ -1,3 +1,3 @@
 pub mod simple_containers;
 pub mod container;
-pub mod kakyoin_container;
+pub mod renderable_3d_object_container;

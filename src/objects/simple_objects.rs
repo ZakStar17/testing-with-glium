@@ -1,60 +1,34 @@
-use cgmath::{EuclideanSpace, Euler, Matrix4, Point3, Rad};
+use cgmath::{Euler, Point3, Rad};
 
-use crate::objects::object::{create_model_matrix, Object};
+use crate::objects::renderable_3d_object::Renderable3dObject;
 use crate::shaders::common::PointLight;
 
 pub struct Cube {
-    pub object: Object,
+    pub object: Renderable3dObject,
 }
 
 impl Cube {
     pub fn new(position: Point3<f32>) -> Cube {
-        let model_matrix = Matrix4::from_translation(position.to_vec());
-
-        let object = Object {
-            position,
-            rotation: Euler {
-                x: Rad(0.0),
-                y: Rad(0.0),
-                z: Rad(0.0),
-            },
-            scale: 1.0,
-            model_matrix: model_matrix,
-        };
-
+        let object = Renderable3dObject::new(position);
         Cube { object }
     }
 
     pub fn from_full(position: Point3<f32>, rotation: Euler<Rad<f32>>, scale: f32) -> Cube {
-        let model_matrix = create_model_matrix(position, rotation, scale);
-
         Cube {
-            object: Object {
-                position,
-                rotation,
-                scale,
-                model_matrix,
-            },
+            object: Renderable3dObject::from_full(position, rotation, scale),
         }
     }
 }
 
 pub struct SimpleLightCube {
-    pub object: Object,
+    pub object: Renderable3dObject,
     pub light: PointLight,
 }
 
 impl SimpleLightCube {
     pub fn new(rotation: Euler<Rad<f32>>, scale: f32, light: PointLight) -> Self {
-        let model_matrix = create_model_matrix(light.position, rotation, scale);
-
         SimpleLightCube {
-            object: Object {
-                position: light.position,
-                rotation,
-                scale,
-                model_matrix,
-            },
+            object: Renderable3dObject::from_full(light.position, rotation, scale),
             light,
         }
     }

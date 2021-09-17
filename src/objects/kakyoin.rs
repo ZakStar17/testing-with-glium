@@ -1,39 +1,31 @@
-use cgmath::{EuclideanSpace, Euler, Matrix4, Point3, Rad};
-
-use crate::objects::object::{create_model_matrix, Object};
+use crate::objects::renderable_3d_object::HasRenderable3dObject;
+use crate::objects::renderable_3d_object::Renderable3dObject;
+use cgmath::{Euler, Point3, Rad};
 
 pub struct Kakyoin {
-    pub object: Object,
+    pub object: Renderable3dObject,
 }
 
 impl Kakyoin {
     pub fn new(position: Point3<f32>) -> Self {
-        let model_matrix = Matrix4::from_translation(position.to_vec());
-
-        let object = Object {
-            position,
-            rotation: Euler {
-                x: Rad(0.0),
-                y: Rad(0.0),
-                z: Rad(0.0),
-            },
-            scale: 1.0,
-            model_matrix: model_matrix,
-        };
-
-        Self { object }
+        Self {
+            object: Renderable3dObject::new(position),
+        }
     }
 
     pub fn from_full(position: Point3<f32>, rotation: Euler<Rad<f32>>, scale: f32) -> Self {
-        let model_matrix = create_model_matrix(position, rotation, scale);
-
         Self {
-            object: Object {
-                position,
-                rotation,
-                scale,
-                model_matrix,
-            },
+            object: Renderable3dObject::from_full(position, rotation, scale),
         }
+    }
+}
+
+impl HasRenderable3dObject for Kakyoin {
+    fn get_object(&self) -> &'_ Renderable3dObject {
+        &self.object
+    }
+
+    fn get_object_mut(&mut self) -> &'_ mut Renderable3dObject {
+        &mut self.object
     }
 }

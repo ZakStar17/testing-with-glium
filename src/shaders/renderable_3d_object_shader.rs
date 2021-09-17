@@ -6,26 +6,26 @@ use obj::{load_obj, Obj};
 use std::fs::File;
 use std::io::BufReader;
 
-pub struct KakyoinShader {
+pub struct Renderable3dObjectShader {
     pub vertex_buffer: VertexBuffer<Vertex3d>,
     pub index_buffer: glium::IndexBuffer<u16>,
     pub material: Material,
 }
 
-impl KakyoinShader {
-    pub fn new(display: &Display) -> Self {
-        let input = BufReader::new(File::open("./assets/objects/kakyoin/kakyoin.obj").unwrap());
+impl Renderable3dObjectShader {
+    pub fn new(
+        display: &Display,
+        model_path: &str,
+        texture_bytes: &dyn std::convert::AsRef<[u8]>,
+    ) -> Self {
+        let input = BufReader::new(File::open(model_path).unwrap());
         let obj: Obj<Vertex3d> = load_obj(input).unwrap();
 
         Self {
             vertex_buffer: obj.vertex_buffer(display).unwrap(),
             index_buffer: obj.index_buffer(display).unwrap(),
             material: Material {
-                diffuse: load_srgb_texture(
-                    display,
-                    &include_bytes!("../../assets/objects/kakyoin/Kakyoin.png"),
-                    image::ImageFormat::Png,
-                ),
+                diffuse: load_srgb_texture(display, texture_bytes, image::ImageFormat::Png),
                 specular: load_srgb_texture(
                     display,
                     &include_bytes!("../../assets/black_picture.png"),
