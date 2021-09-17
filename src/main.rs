@@ -2,7 +2,11 @@
 extern crate glium;
 extern crate cgmath;
 extern crate image;
+extern crate num_traits;
 
+use crate::objects::kakyoin::Kakyoin;
+use crate::containers::kakyoin_container::KakyoinContainerDrawData;
+use crate::containers::kakyoin_container::KakyoinContainerPrograms;
 use cgmath::{Euler, Point3, Rad, Vector3};
 use glium::{glutin, Surface};
 use glutin::event::WindowEvent;
@@ -17,6 +21,7 @@ use camera::Camera;
 use containers::{
     container::ObjectContainer,
     simple_containers::{CubeContainer, CubeContainerDrawData, CubeContainerPrograms},
+    kakyoin_container::KakyoinContainer
 };
 use objects::simple_objects::SimpleLightCube;
 use shaders::{
@@ -39,6 +44,7 @@ struct Programs {
     main_framebuffer: programs::MainFramebufferProgram,
     skybox: programs::SkyBoxProgram,
 }
+
 
 fn main() {
     let event_loop = glutin::event_loop::EventLoop::new();
@@ -125,6 +131,13 @@ fn main() {
     cube_container.generate_cubes();
     println!("Created cubes");
 
+    let mut kakyoin_container = KakyoinContainer::new(&display);
+
+    kakyoin_container.kakyoins.push(Kakyoin::new(Point3::new(5.0, 2.0, 10.0)));
+
+    println!("Loaded kakyoins");
+
+
     let main_framebuffer_shader =
         crate::shaders::main_framebuffer_shader::MainFramebufferShader::new(&display);
 
@@ -177,7 +190,7 @@ fn main() {
 
     let mut pressed_keys = [false; 4];
 
-    let mut t: f32 = 0.5;
+    let mut directional_light: f32 = 0.5;
     let mut flashlight = true;
 
     {
@@ -187,6 +200,8 @@ fn main() {
         window.set_cursor_grab(true).unwrap();
         window.set_cursor_visible(false);
     }
+
+    let mut time = 0.0;
 
     let mut last_frame_time = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
@@ -226,12 +241,12 @@ fn main() {
                         }
                         20 => {
                             // t
-                            t += 0.01;
+                            directional_light += 0.01;
                         }
                         21 => {
                             // y
-                            if t > 0.0 {
-                                t -= 0.01;
+                            if directional_light > 0.0 {
+                                directional_light -= 0.01;
                             }
                         }
                         44 => {
@@ -368,6 +383,13 @@ fn main() {
         let current_frame_time = std::time::Instant::now();
         let delta_time = current_frame_time - last_frame_time;
 
+        kakyoin_container.kakyoins[0].object.rotation = Euler {
+            x: Rad(time),
+            y: Rad(time / 2.0),
+            z: Rad(time / 3.0),
+        };
+        kakyoin_container.kakyoins[0].object.update_model();
+
         camera.handle_mouse_movement(mouse.delta_x, mouse.delta_y);
         camera.handle_keys(pressed_keys, delta_time);
 
@@ -378,7 +400,9 @@ fn main() {
         let mut target = display.draw();
         let size = target.get_dimensions();
 
-        let render_texture = glium::Texture2d::empty_with_format(
+        // I actually need to declare this at a higher level, so they have a higher lifetime that the framebuffer
+        // todo: update this so that the framebuffer doesn't get created every frame
+        let framebuffer_render_texture = glium::Texture2d::empty_with_format(
             &display,
             glium::texture::UncompressedFloatFormat::U8U8U8U8,
             glium::texture::MipmapsOption::NoMipmap,
@@ -387,7 +411,7 @@ fn main() {
         )
         .unwrap();
 
-        let depth_buffer = glium::framebuffer::DepthRenderBuffer::new(
+        let framebuffer_depth_buffer = glium::framebuffer::DepthRenderBuffer::new(
             &display,
             glium::texture::DepthFormat::I24,
             size.0,
@@ -397,8 +421,8 @@ fn main() {
 
         let mut framebuffer = glium::framebuffer::SimpleFrameBuffer::with_depth_buffer(
             &display,
-            &render_texture,
-            &depth_buffer,
+            &framebuffer_render_texture,
+            &framebuffer_depth_buffer,
         )
         .unwrap();
 
@@ -415,7 +439,8 @@ fn main() {
                 write: true,
                 ..Default::default()
             },
-            backface_culling: glium::draw_parameters::BackfaceCullingMode::CullClockwise,
+            // broken because kakyoin's model is not very good
+            // backface_culling: glium::draw_parameters::BackfaceCullingMode::CullClockwise,
             ..Default::default()
         };
 
@@ -430,7 +455,29 @@ fn main() {
                 projection_view: &projection_view,
                 camera_pos: camera.position,
                 spot_light: &spot_light,
-                t: t,
+                t: directional_light,
+            },
+        );
+
+        let ligths: [&PointLight; 4] = [
+            &cube_container.light_cubes[0].light, 
+            &cube_container.light_cubes[1].light, 
+            &cube_container.light_cubes[2].light, 
+            &cube_container.light_cubes[3].light
+        ];
+
+        kakyoin_container.draw(
+            &mut framebuffer,
+            KakyoinContainerPrograms {
+                kakyoin: &programs.textured_object,
+            },
+            &params,
+            KakyoinContainerDrawData {
+                projection_view: &projection_view,
+                camera_pos: camera.position,
+                spot_light: &spot_light,
+                point_lights: &ligths,
+                t: directional_light,
             },
         );
 
@@ -456,7 +503,7 @@ fn main() {
 
         // draw framebuffer to target (with post processing effects)
         target.clear_depth(1.0);
-        let uniforms = programs::MainFramebufferProgram::get_uniforms(&render_texture);
+        let uniforms = programs::MainFramebufferProgram::get_uniforms(&framebuffer_render_texture);
         target
             .draw(
                 &main_framebuffer_shader.vertex_buffer,
@@ -470,7 +517,8 @@ fn main() {
 
         last_frame_time = current_frame_time;
         mouse.delta_x = 0.0;
-        mouse.delta_y = 0.0
+        mouse.delta_y = 0.0;
+        time += 0.1;
     });
 }
 

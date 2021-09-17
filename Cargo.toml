@@ -8,5 +8,7 @@ edition = "2018"
 
 [dependencies]
 glium = "0.29.1"
+obj-rs = { version = "0.6", features = ["glium"] }
 image = "*"
 cgmath = "*"
+num-traits = "0.2"

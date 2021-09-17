@@ -1,3 +1,8 @@
+use num_traits::FromPrimitive;
+use obj::raw::object::Polygon;
+use obj::FromRawVertex;
+use obj::ObjResult;
+use std::collections::hash_map::{Entry, HashMap};
 use std::io::Cursor;
 
 use cgmath::{Point3, Vector3};
@@ -51,6 +56,59 @@ pub struct Vertex3d {
     pub position: [f32; 3],
     pub normal: [f32; 3],
     pub tex_coords: [f32; 2],
+}
+
+impl<I: FromPrimitive + Copy> FromRawVertex<I> for Vertex3d {
+    fn process(
+        positions: Vec<(f32, f32, f32, f32)>,
+        normals: Vec<(f32, f32, f32)>,
+        tex_coords: Vec<(f32, f32, f32)>,
+        polygons: Vec<Polygon>,
+    ) -> ObjResult<(Vec<Self>, Vec<I>)> {
+        let mut vb = Vec::with_capacity(polygons.len() * 3);
+        let mut ib = Vec::with_capacity(polygons.len() * 3);
+        {
+            let mut cache = HashMap::new();
+            let mut map = |pi: usize, ni: usize, ti: usize| {
+                // Look up cache
+                let index = match cache.entry((pi, ni, ti)) {
+                    // Cache miss -> make new, store it on cache
+                    Entry::Vacant(entry) => {
+                        let p = positions[pi];
+                        let n = normals[ni];
+                        let t = tex_coords[ti];
+                        let vertex = Vertex3d {
+                            position: [p.0, p.1, p.2],
+                            normal: [n.0, n.1, n.2],
+                            tex_coords: [t.0, t.1],
+                        };
+                        let index = I::from_usize(vb.len())
+                            .expect("Unable to convert the index from usize");
+                        vb.push(vertex);
+                        entry.insert(index);
+                        index
+                    }
+                    // Cache hit -> use it
+                    Entry::Occupied(entry) => *entry.get(),
+                };
+                ib.push(index)
+            };
+
+            for polygon in polygons {
+                match polygon {
+                    Polygon::P(_) => panic!("Tried to extract normal and texture data which are not contained in the model"),
+                    Polygon::PT(_) => panic!("Tried to extract normal data which are not contained in the model"),
+                    Polygon::PN(_) => panic!("Tried to extract texture data which are not contained in the model"),
+                    Polygon::PTN(ref vec) if vec.len() == 3 => {
+                        for &(pi, ti, ni) in vec { map(pi, ni, ti) }
+                    }
+                    _ => panic!("Model should be triangulated first to be loaded properly")
+                }
+            }
+        }
+        vb.shrink_to_fit();
+        Ok((vb, ib))
+    }
 }
 
 #[derive(Copy, Clone)]
